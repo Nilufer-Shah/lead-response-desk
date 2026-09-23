@@ -1,0 +1,12 @@
+{
+  "name": "Roopkala Lead Desk",
+  "short_name": "Lead Desk",
+  "description": "Fast, accountable lead response for every enquiry.",
+  "start_url": "/today",
+  "display": "standalone",
+  "background_color": "#0E1726",
+  "theme_color": "#0E1726",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

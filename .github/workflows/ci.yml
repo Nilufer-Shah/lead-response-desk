@@ -1,0 +1,53 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  database-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.8-bookworm
+        env:
+          POSTGRES_USER: lead_desk
+          POSTGRES_PASSWORD: lead_desk
+          POSTGRES_DB: lead_desk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lead_desk -d lead_desk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://lead_desk:lead_desk@localhost:5432/lead_desk
+      SESSION_SECRET: ci-only-session-secret-with-thirty-two-characters
+      META_CONNECTION_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: PGPASSWORD=lead_desk psql -h localhost -U lead_desk -d lead_desk -c "CREATE ROLE lead_desk_app LOGIN NOSUPERUSER PASSWORD 'lead_desk_app'; CREATE SCHEMA pgboss AUTHORIZATION lead_desk_app;"
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run db:verify
