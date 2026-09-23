@@ -2,7 +2,7 @@
 
 Standalone, multi-tenant lead response application. Tenant-facing product copy is configured per tenant; the included seed renders **Roopkala Lead Desk**.
 
-Meta Lead Ads is intentionally disabled for this build stage. CSV upload and read-only Google Sheets polling are the active ingestion paths. The Meta adapter, schema boundary, connection status, and disabled worker schedules are present so the connection can be completed last without changing the core data model.
+Meta Lead Ads ingestion is implemented but disabled by default until the tenant's Meta credentials and form IDs are supplied. CSV upload and read-only Google Sheets polling remain available independently.
 
 ## Local development
 
@@ -60,14 +60,14 @@ npm run db:verify
 
 `db:verify` queries PostgreSQL's catalogs and fails if any application table lacks a non-null `tenant_id`, forced row-level security, or at least one RLS policy. CI runs the same assertion against PostgreSQL 16.
 
-Before production deployment, run `NODE_ENV=production npm run launch:check -- --production`. The check rejects demo mode, insecure/public-local URLs, placeholder session secrets, incomplete Google credentials, and an accidentally enabled Meta connection.
+Before production deployment, run `NODE_ENV=production npm run launch:check -- --production`. The check rejects demo mode, insecure/public-local URLs, placeholder session secrets, and incomplete credentials for any enabled integration.
 
 ## Repository map
 
 - `src/app`: role-specific web surfaces and API routes
 - `src/db`: Drizzle schema and ordered SQL migrations
 - `src/domain`: SLA, normalization, and closure-gate rules
-- `src/lead-sources`: source adapter contract, CSV implementation, deferred Meta boundary
+- `src/lead-sources`: source adapter contract plus CSV and Meta Lead Ads implementations
 - `src/integrations`: authenticated, read-only Google Sheets client and row mapping
 - `src/worker`: dedicated pg-boss worker and schedules
 - `src/notifications`: WhatsApp, push, and email fallback boundary

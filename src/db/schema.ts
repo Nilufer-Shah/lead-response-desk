@@ -154,8 +154,9 @@ export const metaConnections = app.table("meta_connections", {
   pageId: text("page_id"), adAccountId: text("ad_account_id"), tokenCiphertext: text("token_ciphertext"),
   encryptionKeyVersion: integer("encryption_key_version").default(1).notNull(), tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
   lastHealthyAt: timestamp("last_healthy_at", { withTimezone: true }), lastWebhookAt: timestamp("last_webhook_at", { withTimezone: true }),
+  lastReconciledAt: timestamp("last_reconciled_at", { withTimezone: true }), lastReconciliationResult: jsonb("last_reconciliation_result").default({}).notNull(),
   createdAt: createdAt(), updatedAt: updatedAt(),
-}, (table) => [uniqueIndex("meta_connection_page_uq").on(table.pageId)]);
+}, (table) => [uniqueIndex("meta_connection_page_uq").on(table.pageId), uniqueIndex("meta_connection_source_uq").on(table.tenantId, table.sourceConnectionId)]);
 
 export const sourceForms = app.table("source_forms", {
   id: id(), tenantId: tenantId(), sourceConnectionId: uuid("source_connection_id").notNull(),

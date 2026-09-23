@@ -8,8 +8,9 @@ import { queueDailyOwnerDigest } from "@/services/digest";
 import { generateWeeklyPdf } from "@/services/weekly-report";
 import { deliverQueuedNotifications } from "@/services/notification-delivery";
 import { syncGoogleSheetConnection } from "@/services/google-sheets-sync";
+import { processMetaWebhookEvent, reconcileMetaLeads } from "@/services/meta-leads";
 
-type TenantJob = { tenantId: string; jobId?: string; leadId?: string; reportId?: string; periodStart?: string; periodEnd?: string; commentary?: string };
+type TenantJob = { tenantId: string; webhookEventId?: string; jobId?: string; leadId?: string; reportId?: string; periodStart?: string; periodEnd?: string; commentary?: string };
 
 const boss = new PgBoss({ connectionString: env().DATABASE_URL, schema: "pgboss", application_name: "lead-response-worker" });
 
@@ -21,7 +22,7 @@ async function main() {
   boss.on("error", (error) => process.stderr.write(`${error.stack ?? error.message}\n`));
   await boss.start();
 
-  const queues = ["sla.check", "followup.due", "notification.send", "metrics.daily", "digest.daily", "report.weekly", "integrity.daily", "webhook.recover", "meta.reconcile", "google-sheets.sync"];
+  const queues = ["sla.check", "followup.due", "notification.send", "metrics.daily", "digest.daily", "report.weekly", "integrity.daily", "webhook.recover", "meta.process", "meta.reconcile", "google-sheets.sync"];
   await Promise.all(queues.map(registerQueue));
 
   await boss.work<TenantJob>("sla.check", async (jobs) => {
@@ -82,6 +83,19 @@ async function main() {
       process.stdout.write(`Google Sheets sync ${job.data.tenantId}: ${result.inserted} new, ${result.repeats} repeats, ${result.unchanged} unchanged\n`);
     }
   });
+  await boss.work<TenantJob>("meta.process", async (jobs) => {
+    for (const job of jobs) {
+      if (!job.data.webhookEventId) throw new Error("Meta processing job is missing webhookEventId");
+      const result = await processMetaWebhookEvent(job.data.tenantId, job.data.webhookEventId);
+      process.stdout.write(`Meta webhook ${job.data.webhookEventId}: ${result.ingested} lead(s) processed\n`);
+    }
+  });
+  await boss.work<TenantJob>("meta.reconcile", async (jobs) => {
+    for (const job of jobs) {
+      const result = await reconcileMetaLeads(job.data.tenantId);
+      process.stdout.write(`Meta reconciliation ${job.data.tenantId}: ${result.inserted} new, ${result.unchanged} already present\n`);
+    }
+  });
 
   const tenantId = env().DEFAULT_TENANT_ID;
   await boss.schedule("sla.check", "* * * * *", { tenantId }, { tz: "Asia/Kolkata", key: "roopkala-sla-minute" });
@@ -95,9 +109,7 @@ async function main() {
     await boss.schedule("google-sheets.sync", `*/${env().GOOGLE_SHEETS_POLL_MINUTES} * * * *`, { tenantId }, { tz: "Asia/Kolkata", key: "google-sheets-poll" });
   }
   if (env().META_CONNECTION_ENABLED === "true") {
-    await registerQueue("meta.reconcile");
-    await boss.schedule("meta.reconcile", "0 * * * *", { tenantId }, { tz: "Asia/Kolkata", key: "roopkala-hourly-reconcile" });
-    await boss.schedule("meta.reconcile", "45 23 * * *", { tenantId }, { tz: "Asia/Kolkata", key: "roopkala-night-reconcile" });
+    await boss.schedule("meta.reconcile", "*/15 * * * *", { tenantId }, { tz: "Asia/Kolkata", key: "meta-reconcile-15m" });
   }
 
   process.stdout.write("Lead Response Desk worker ready\n");

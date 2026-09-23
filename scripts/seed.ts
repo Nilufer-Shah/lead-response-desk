@@ -15,7 +15,6 @@ const users = {
   agency: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
 };
 const sql = postgres(settings.DATABASE_URL, { prepare: false });
-const passwordHash = await hash("RoopkalaDemo!2026", 12);
 const people = ["Priya Sharma", "Meera Joshi", "Nisha Patel", "Kavita Rao", "Anjali Desai", "Sonal Shah", "Ritika Mehta", "Pooja Anand", "Shreya Malhotra", "Devika Kapoor", "Ayesha Khan", "Rupal Mehta"];
 
 function atIst(daysAgo: number, hour: number, minute: number) {
@@ -27,6 +26,7 @@ function atIst(daysAgo: number, hour: number, minute: number) {
 }
 
 async function main() {
+  const passwordHash = await hash("RoopkalaDemo!2026", 12);
   await sql.begin(async (transaction) => {
     await transaction`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
     await transaction`SELECT set_config('app.user_role', 'system', true)`;
@@ -49,6 +49,11 @@ async function main() {
         INSERT INTO app.leads (id,tenant_id,source,external_id,campaign_id,campaign_name,ad_id,ad_name,full_name,phone_e164,phone_raw,city,custom_fields,stage,conversation_state,assigned_to,assigned_at,store_id,lead_created_at,received_at,sla_policy_version_id,sla_due_at)
         VALUES (${id},${tenantId},'csv_import',${`demo-sheet-${index + 1}`},${`campaign-${index % 3}`},${["Wedding Edit","Festive Silks","Bridal Consultation"][index % 3]},${`ad-${index % 4}`},${["Pink Kanjivaram","Wedding Reel","Designer Saree","Bridal Story"][index % 4]},${people[index % people.length]},${`+91981000${String(index + 1).padStart(4,"0")}`},${`981000${String(index + 1).padStart(4,"0")}`},${["Mumbai","Thane","Pune","Dubai"][index % 4]},'{}', 'new','waiting_on_us',${assignedTo},${receivedAt},${storeId},${receivedAt},${receivedAt},${policyId},${new Date(receivedAt.getTime()+5*60_000)})
         ON CONFLICT (tenant_id,source,external_id) DO UPDATE SET full_name=excluded.full_name RETURNING id
+      `;
+      await transaction`
+        INSERT INTO app.lead_events (tenant_id,lead_id,event_type,actor_type,payload,occurred_at)
+        SELECT ${tenantId},${lead.id},'lead_received','system',${transaction.json({ source: "csv_import", seeded: true })},${receivedAt}
+        WHERE NOT EXISTS (SELECT 1 FROM app.lead_events WHERE tenant_id=${tenantId} AND lead_id=${lead.id} AND event_type='lead_received')
       `;
       if (index >= 5) {
         const firstAttempt = new Date(receivedAt.getTime() + (index % 4 + 1) * 60_000);

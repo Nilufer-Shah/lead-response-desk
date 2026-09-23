@@ -12,7 +12,13 @@ export interface InboundLead {
   emailRaw?: string | null;
   city?: string | null;
   campaignName?: string | null;
+  campaignId?: string | null;
+  adsetName?: string | null;
+  adsetId?: string | null;
   adName?: string | null;
+  adId?: string | null;
+  formId?: string | null;
+  formName?: string | null;
   customFields?: Record<string, unknown>;
   eventPayload?: Record<string, unknown>;
 }
@@ -71,17 +77,35 @@ export async function ingestLead(transaction: postgres.TransactionSql, tenantId:
     SELECT id FROM app.leads WHERE tenant_id=${tenantId} AND meta_lead_id=${input.metaLeadId} LIMIT 1
   ` : [];
   if (metaMatch) {
+    await transaction`UPDATE app.leads SET
+      meta_lead_id=COALESCE(${input.metaLeadId ?? null},meta_lead_id), form_id=COALESCE(${input.formId ?? null},form_id), form_name=COALESCE(${input.formName ?? null},form_name),
+      campaign_id=COALESCE(${input.campaignId ?? null},campaign_id), campaign_name=COALESCE(${input.campaignName ?? null},campaign_name),
+      adset_id=COALESCE(${input.adsetId ?? null},adset_id), adset_name=COALESCE(${input.adsetName ?? null},adset_name), ad_id=COALESCE(${input.adId ?? null},ad_id), ad_name=COALESCE(${input.adName ?? null},ad_name),
+      custom_fields=custom_fields || ${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))}::jsonb,updated_at=clock_timestamp()
+      WHERE tenant_id=${tenantId} AND id=${metaMatch.id}`;
     await transaction`INSERT INTO app.lead_events (tenant_id,lead_id,event_type,actor_type,payload) VALUES (${tenantId},${metaMatch.id},'source_matched','system',${transaction.json({ source: input.source, externalId: input.externalId, metaLeadId: input.metaLeadId, ...input.eventPayload })})`;
     return { action: "unchanged", leadId: metaMatch.id };
   }
 
-  const [existing] = await transaction<{ id: string; stage: string }[]>`
-    SELECT id,stage::text FROM app.leads
+  const [existing] = await transaction<{ id: string; stage: string; source: LeadSource; received_at: Date }[]>`
+    SELECT id,stage::text,source,received_at FROM app.leads
     WHERE tenant_id=${tenantId}
       AND ((${phone.phoneE164}::text IS NOT NULL AND phone_e164=${phone.phoneE164})
         OR (${email}::text IS NOT NULL AND lower(email)=lower(${email})))
     ORDER BY received_at DESC LIMIT 1 FOR UPDATE
   `;
+
+  const isCrossSourceDuplicate = existing && existing.source !== input.source && Math.abs(existing.received_at.getTime() - input.arrivedAt.getTime()) <= 10 * 60_000;
+  if (isCrossSourceDuplicate) {
+    await transaction`UPDATE app.leads SET
+      meta_lead_id=COALESCE(${input.metaLeadId ?? null},meta_lead_id), form_id=COALESCE(${input.formId ?? null},form_id), form_name=COALESCE(${input.formName ?? null},form_name),
+      campaign_id=COALESCE(${input.campaignId ?? null},campaign_id),campaign_name=COALESCE(${input.campaignName ?? null},campaign_name),
+      adset_id=COALESCE(${input.adsetId ?? null},adset_id),adset_name=COALESCE(${input.adsetName ?? null},adset_name),ad_id=COALESCE(${input.adId ?? null},ad_id),ad_name=COALESCE(${input.adName ?? null},ad_name),
+      custom_fields=custom_fields || ${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))}::jsonb,updated_at=clock_timestamp()
+      WHERE tenant_id=${tenantId} AND id=${existing.id}`;
+    await transaction`INSERT INTO app.lead_events (tenant_id,lead_id,event_type,actor_type,payload) VALUES (${tenantId},${existing.id},'source_matched','system',${transaction.json({ source: input.source, externalId: input.externalId, metaLeadId: input.metaLeadId, matchedWithinMinutes: 10, ...input.eventPayload })})`;
+    return { action: "unchanged", leadId: existing.id };
+  }
 
   const [store] = await transaction<{ id: string }[]>`
     SELECT id FROM app.stores WHERE tenant_id=${tenantId} AND active AND is_default ORDER BY created_at LIMIT 1
@@ -109,8 +133,9 @@ export async function ingestLead(transaction: postgres.TransactionSql, tenantId:
       UPDATE app.leads SET
         source=${input.source}::app.lead_source, external_id=${input.externalId}, meta_lead_id=COALESCE(${input.metaLeadId ?? null},meta_lead_id),
         full_name=COALESCE(${titleCaseName(input.fullNameRaw ?? "") || null},full_name), full_name_raw=COALESCE(${input.fullNameRaw ?? null},full_name_raw),
-        email=COALESCE(${email},email), city=COALESCE(${input.city ?? null},city), campaign_name=COALESCE(${input.campaignName ?? null},campaign_name),
-        ad_name=COALESCE(${input.adName ?? null},ad_name), custom_fields=custom_fields || ${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))}::jsonb,
+        email=COALESCE(${email},email), city=COALESCE(${input.city ?? null},city), campaign_id=COALESCE(${input.campaignId ?? null},campaign_id), campaign_name=COALESCE(${input.campaignName ?? null},campaign_name),
+        adset_id=COALESCE(${input.adsetId ?? null},adset_id), adset_name=COALESCE(${input.adsetName ?? null},adset_name), ad_id=COALESCE(${input.adId ?? null},ad_id), ad_name=COALESCE(${input.adName ?? null},ad_name),
+        form_id=COALESCE(${input.formId ?? null},form_id), form_name=COALESCE(${input.formName ?? null},form_name), custom_fields=custom_fields || ${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))}::jsonb,
         stage='new', conversation_state='waiting_on_us', received_at=${input.arrivedAt}, assigned_to=${assigneeId}, assigned_at=clock_timestamp(), store_id=${store.id},
         first_touch_at=NULL, first_contacted_at=NULL, first_response_minutes=NULL, first_connect_at=NULL,
         sla_policy_version_id=${policy.id}, sla_due_at=${dueAt}, sla_breached=false, sla_breach_minutes=NULL,
@@ -134,11 +159,12 @@ export async function ingestLead(transaction: postgres.TransactionSql, tenantId:
   await transaction`
     INSERT INTO app.leads (
       id,tenant_id,source,external_id,meta_lead_id,full_name,full_name_raw,phone_e164,phone_raw,email,city,is_international,
-      campaign_name,ad_name,custom_fields,assigned_to,assigned_at,store_id,lead_created_at,received_at,sla_policy_version_id,sla_due_at
+      form_id,form_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,custom_fields,assigned_to,assigned_at,store_id,lead_created_at,received_at,sla_policy_version_id,sla_due_at
     ) VALUES (
       ${leadId},${tenantId},${input.source}::app.lead_source,${input.externalId},${input.metaLeadId ?? null},
       ${titleCaseName(input.fullNameRaw ?? "") || null},${input.fullNameRaw ?? null},${phone.phoneE164},${input.phoneRaw ?? null},${email},${input.city ?? null},${phone.isInternational},
-      ${input.campaignName ?? null},${input.adName ?? null},${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))},${assigneeId},clock_timestamp(),${store.id},${input.arrivedAt},${input.arrivedAt},${policy.id},${dueAt}
+      ${input.formId ?? null},${input.formName ?? null},${input.campaignId ?? null},${input.campaignName ?? null},${input.adsetId ?? null},${input.adsetName ?? null},${input.adId ?? null},${input.adName ?? null},
+      ${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))},${assigneeId},clock_timestamp(),${store.id},${input.arrivedAt},${input.arrivedAt},${policy.id},${dueAt}
     )
   `;
   await transaction`INSERT INTO app.lead_events (tenant_id,lead_id,event_type,actor_type,payload) VALUES (${tenantId},${leadId},'lead_received','system',${transaction.json({ source: input.source, externalId: input.externalId, arrivedAt: input.arrivedAt.toISOString(), assignedTo: assigneeId, ...input.eventPayload })})`;

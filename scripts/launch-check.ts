@@ -18,11 +18,11 @@ if (production) {
   if (!process.env.POSTGRES_APP_PASSWORD || process.env.POSTGRES_APP_PASSWORD.startsWith("replace")) errors.push("POSTGRES_APP_PASSWORD must be replaced");
 }
 if (config.GOOGLE_SHEETS_ENABLED === "true" && (!config.GOOGLE_SERVICE_ACCOUNT_EMAIL || !config.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY)) errors.push("Google Sheets is enabled but service account credentials are incomplete");
-if (config.META_CONNECTION_ENABLED === "true") errors.push("Meta must remain disabled until the final connection stage");
+if (config.META_CONNECTION_ENABLED === "true" && (!config.META_APP_ID || !config.META_APP_SECRET || !config.META_VERIFY_TOKEN || !config.META_SYSTEM_USER_TOKEN)) errors.push("Meta is enabled but app, signature, verification or system-user credentials are incomplete");
 if (config.WHATSAPP_PROVIDER === "disabled") warnings.push("Automated WhatsApp delivery is disabled; tap-to-open WhatsApp still works");
 
 process.stdout.write(`Launch preflight (${production ? "production" : "development"})\n`);
-process.stdout.write(`- app: ${config.APP_URL}\n- demo mode: ${config.DEMO_MODE}\n- Google Sheets: ${config.GOOGLE_SHEETS_ENABLED === "true" ? "enabled" : "disabled"}\n- Meta: deferred\n`);
+process.stdout.write(`- app: ${config.APP_URL}\n- demo mode: ${config.DEMO_MODE}\n- Google Sheets: ${config.GOOGLE_SHEETS_ENABLED === "true" ? "enabled" : "disabled"}\n- Meta: ${config.META_CONNECTION_ENABLED === "true" ? "enabled" : "disabled"}\n`);
 for (const warning of warnings) process.stdout.write(`WARNING: ${warning}\n`);
 for (const error of errors) process.stderr.write(`ERROR: ${error}\n`);
 if (errors.length) process.exitCode = 1;
