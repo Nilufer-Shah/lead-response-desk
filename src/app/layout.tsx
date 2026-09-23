@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { PwaBoot } from "@/components/pwa-boot";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
@@ -10,7 +9,6 @@ export const metadata: Metadata = {
   title: { default: "Roopkala Lead Desk", template: "%s · Roopkala Lead Desk" },
   description: "Fast, accountable lead response for every enquiry.",
   applicationName: "Roopkala Lead Desk",
-  manifest: "/manifest.webmanifest",
   icons: { icon: "/favicon.ico" },
   openGraph: {
     title: "Roopkala Lead Desk",
@@ -28,5 +26,5 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className={inter.variable}><PwaBoot />{children}</body></html>;
+  return <html lang="en"><body className={inter.variable}>{children}</body></html>;
 }

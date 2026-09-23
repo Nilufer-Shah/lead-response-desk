@@ -18,18 +18,19 @@ async function main() {
   applicationUrl.username = "lead_desk_app";
   applicationUrl.password = process.env.POSTGRES_APP_PASSWORD ?? "lead_desk_app";
   process.env.DATABASE_URL = applicationUrl.toString();
-  const { getLeadDetail, getLeadList, getProductDashboard, getTodayQueue } = await import("../src/services/product-read-models");
+  const { getLeadList, getProductDashboard, getTodayQueue } = await import("../src/services/product-read-models");
   const { closeDatabase } = await import("../src/db");
-  const owner = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", tenantId: "11111111-1111-4111-8111-111111111111", name: "Harsh Shah", role: "owner" as const };
-  const salesperson = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", tenantId: owner.tenantId, name: "Ashwini", role: "salesperson" as const };
-  const [ownerLeads, staffLeads, dashboard, today, detail] = await Promise.all([
-    getLeadList(owner), getLeadList(salesperson), getProductDashboard(owner,"today"), getTodayQueue(salesperson),
-    getLeadDetail(owner,"90000000-0000-4000-8000-000000000001"),
+  const tenantId = process.env.DEFAULT_TENANT_ID ?? "11111111-1111-4111-8111-111111111111";
+  const [ownerRow] = await sql<{ id: string; display_name: string }[]>`
+    SELECT id,display_name FROM app.users WHERE tenant_id=${tenantId} AND role='owner' AND status='active' ORDER BY created_at LIMIT 1
+  `;
+  if (!ownerRow) throw new Error("No active bootstrap owner was found");
+  const owner = { id: ownerRow.id, tenantId, name: ownerRow.display_name, role: "owner" as const };
+  const [ownerLeads, dashboard, today] = await Promise.all([
+    getLeadList(owner), getProductDashboard(owner,"today"), getTodayQueue(owner),
   ]);
-  if (ownerLeads.length < 18) throw new Error(`Expected at least 18 owner leads, received ${ownerLeads.length}`);
-  if (!staffLeads.length || staffLeads.some((lead) => lead.owner !== "Ashwini")) throw new Error("Salesperson read model escaped assignment scope");
-  if (!dashboard.people.length || !detail?.timeline.length || !Array.isArray(today.newLeads)) throw new Error("A Block 1 read model returned incomplete data");
-  process.stdout.write(`Tenant security verified: ${summary.protected_tables}/${summary.app_tables}; Block 1 read models owner=${ownerLeads.length}, staff=${staffLeads.length}.\n`);
+  if (!Array.isArray(dashboard.people) || !Array.isArray(today.newLeads)) throw new Error("A core read model returned incomplete data");
+  process.stdout.write(`Tenant security verified: ${summary.protected_tables}/${summary.app_tables}; fresh read models owner_leads=${ownerLeads.length}.\n`);
   await closeDatabase();
 }
 

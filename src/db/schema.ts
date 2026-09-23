@@ -30,8 +30,6 @@ export const leadStage = app.enum("lead_stage", ["new", "contacted", "follow_up"
 export const followupStatus = app.enum("followup_status", ["pending", "done", "missed", "cancelled"]);
 export const followupAnswer = app.enum("followup_answer", ["yes", "no"]);
 export const conversationState = app.enum("conversation_state", ["waiting_on_us", "waiting_on_lead", "scheduled", "closed"]);
-export const qualityFlag = app.enum("quality_flag", ["unrated", "good", "invalid_number", "wrong_person", "out_of_area", "budget_mismatch", "competitor", "spam", "duplicate"]);
-export const closeReason = app.enum("close_reason", ["bought", "bought_elsewhere", "price_too_high", "out_of_area", "just_browsing", "unreachable", "wrong_number", "invalid_number", "duplicate", "spam", "no_response"]);
 export const actorType = app.enum("actor_type", ["system", "user", "client", "agency"]);
 export const attemptChannel = app.enum("attempt_channel", ["call", "whatsapp", "sms", "email", "in_person"]);
 export const attemptEventType = app.enum("attempt_event_type", ["disposition_logged", "whatsapp_queued", "whatsapp_sent", "whatsapp_delivered", "whatsapp_read", "whatsapp_replied", "whatsapp_failed", "duration_reported", "note_added"]);
@@ -193,8 +191,8 @@ export const leads = app.table("leads", {
   slaDueAt: timestamp("sla_due_at", { withTimezone: true }).notNull(), slaBreached: boolean("sla_breached").default(false).notNull(),
   slaBreachMinutes: integer("sla_breach_minutes"), attemptCount: integer("attempt_count").default(0).notNull(),
   lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }), nextActionAt: timestamp("next_action_at", { withTimezone: true }),
-  closedAt: timestamp("closed_at", { withTimezone: true }), closedBy: uuid("closed_by"), outcomeReason: text("outcome_reason"), closeReason: closeReason("close_reason"),
-  qualityFlag: qualityFlag("quality_flag").default("unrated").notNull(), orderValue: numeric("order_value", { precision: 12, scale: 2 }),
+  closedAt: timestamp("closed_at", { withTimezone: true }), closedBy: uuid("closed_by"), outcomeReason: text("outcome_reason"),
+  orderValue: numeric("order_value", { precision: 12, scale: 2 }),
   hydrationFailed: boolean("hydration_failed").default(false).notNull(), sourceRecovery: boolean("source_recovery").default(false).notNull(),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [
@@ -241,6 +239,7 @@ export const notes = app.table("notes", {
 
 export const leadFollowups = app.table("lead_followups", {
   id: id(), tenantId: tenantId(), leadId: uuid("lead_id").notNull(), dayNumber: integer("day_number").notNull(),
+  assignedTo: uuid("assigned_to").notNull(),
   dueDate: date("due_date").notNull(), status: followupStatus("status").default("pending").notNull(),
   answer: followupAnswer("answer"), note: text("note"), attemptId: uuid("attempt_id"),
   answeredAt: timestamp("answered_at", { withTimezone: true }), answeredBy: uuid("answered_by"),

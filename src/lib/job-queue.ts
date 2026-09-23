@@ -5,10 +5,10 @@ const queueGlobal = globalThis as unknown as { leadDeskBoss?: PgBoss; leadDeskBo
 
 export function webJobQueue(): Promise<PgBoss> {
   if (!queueGlobal.leadDeskBossStarted) {
-    const boss = new PgBoss({ connectionString: env().DATABASE_URL, schema: "pgboss", application_name: "lead-response-web" });
+    const boss = new PgBoss({ connectionString: env().DATABASE_URL, schema: "pgboss", createSchema: false, application_name: "lead-response-web" });
     boss.on("error", (error) => console.error("Job queue error", error));
     queueGlobal.leadDeskBoss = boss;
-    queueGlobal.leadDeskBossStarted = boss.start().then(async () => { await boss.createQueue("meta.process", { policy: "singletonKey" }); return boss; });
+    queueGlobal.leadDeskBossStarted = boss.start().then(async () => { await boss.createQueue("meta.process", { policy: "singleton" }); return boss; });
   }
   return queueGlobal.leadDeskBossStarted;
 }

@@ -25,21 +25,8 @@ export interface InboundLead {
 
 export type IngestResult = { action: "inserted" | "unchanged" | "repeat_open" | "reactivated"; leadId: string };
 
-async function nextAssignee(transaction: postgres.TransactionSql, tenantId: string, international: boolean): Promise<string | null> {
+async function nextAssignee(transaction: postgres.TransactionSql, tenantId: string): Promise<string | null> {
   await transaction`SELECT pg_advisory_xact_lock(hashtextextended(${`assignment:${tenantId}`},0))`;
-  if (international) {
-    const [handler] = await transaction<{ id: string }[]>`
-      SELECT u.id FROM app.assignment_rules r
-      JOIN app.users u ON u.tenant_id=r.tenant_id AND u.id=r.action->>'userId'
-      WHERE r.tenant_id=${tenantId} AND r.active AND r.conditions->>'isInternational'='true' AND u.status='active'
-      ORDER BY r.priority LIMIT 1
-    `;
-    if (handler) return handler.id;
-    const [owner] = await transaction<{ id: string }[]>`
-      SELECT id FROM app.users WHERE tenant_id=${tenantId} AND role='owner' AND status='active' ORDER BY created_at,id LIMIT 1
-    `;
-    return owner?.id ?? null;
-  }
   const [salesperson] = await transaction<{ id: string }[]>`
     SELECT u.id
     FROM app.users u
@@ -60,7 +47,7 @@ async function nextAssignee(transaction: postgres.TransactionSql, tenantId: stri
 }
 
 export async function ingestLead(transaction: postgres.TransactionSql, tenantId: string, input: InboundLead): Promise<IngestResult> {
-  const phone = input.phoneRaw ? normalizePhone(input.phoneRaw) : { phoneE164: null, isInternational: false };
+  const phone = input.phoneRaw ? normalizePhone(input.phoneRaw) : { phoneE164: null };
   const email = normalizeEmail(input.emailRaw);
   if (!phone.phoneE164 && !email) throw new Error("A phone number or email is required");
   const lockIdentity = phone.phoneE164 ?? `email:${email}`;
@@ -111,18 +98,15 @@ export async function ingestLead(transaction: postgres.TransactionSql, tenantId:
     SELECT id FROM app.stores WHERE tenant_id=${tenantId} AND active AND is_default ORDER BY created_at LIMIT 1
   `;
   if (!store) throw new Error("Configure a default store before importing leads");
-  const policyKind = phone.isInternational ? "international" : "domestic";
   const [policy] = await transaction<{ id: string; first_touch_target_minutes: number }[]>`
     SELECT id,first_touch_target_minutes FROM app.sla_policies
-    WHERE tenant_id=${tenantId} AND applies_to=${policyKind} AND effective_from<=clock_timestamp()
+    WHERE tenant_id=${tenantId} AND applies_to='domestic' AND effective_from<=clock_timestamp()
     ORDER BY effective_from DESC,version DESC LIMIT 1
   `;
   if (!policy) throw new Error("Configure the first-response policy before importing leads");
-  const assigneeId = await nextAssignee(transaction, tenantId, phone.isInternational);
+  const assigneeId = await nextAssignee(transaction, tenantId);
   if (!assigneeId) throw new Error("Create an active owner before importing leads");
-  const dueAt = phone.isInternational
-    ? new Date(input.arrivedAt.getTime() + policy.first_touch_target_minutes * 60_000)
-    : (await transaction<{ due_at: Date }[]>`SELECT app.add_store_business_minutes(${tenantId},${store.id},${input.arrivedAt},${policy.first_touch_target_minutes}) AS due_at`)[0].due_at;
+  const dueAt = (await transaction<{ due_at: Date }[]>`SELECT app.add_store_business_minutes(${tenantId},${store.id},${input.arrivedAt},${policy.first_touch_target_minutes}) AS due_at`)[0].due_at;
 
   if (existing && existing.stage === "dormant") {
     await transaction`
@@ -158,11 +142,11 @@ export async function ingestLead(transaction: postgres.TransactionSql, tenantId:
   const leadId = crypto.randomUUID();
   await transaction`
     INSERT INTO app.leads (
-      id,tenant_id,source,external_id,meta_lead_id,full_name,full_name_raw,phone_e164,phone_raw,email,city,is_international,
+      id,tenant_id,source,external_id,meta_lead_id,full_name,full_name_raw,phone_e164,phone_raw,email,city,
       form_id,form_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,custom_fields,assigned_to,assigned_at,store_id,lead_created_at,received_at,sla_policy_version_id,sla_due_at
     ) VALUES (
       ${leadId},${tenantId},${input.source}::app.lead_source,${input.externalId},${input.metaLeadId ?? null},
-      ${titleCaseName(input.fullNameRaw ?? "") || null},${input.fullNameRaw ?? null},${phone.phoneE164},${input.phoneRaw ?? null},${email},${input.city ?? null},${phone.isInternational},
+      ${titleCaseName(input.fullNameRaw ?? "") || null},${input.fullNameRaw ?? null},${phone.phoneE164},${input.phoneRaw ?? null},${email},${input.city ?? null},
       ${input.formId ?? null},${input.formName ?? null},${input.campaignId ?? null},${input.campaignName ?? null},${input.adsetId ?? null},${input.adsetName ?? null},${input.adId ?? null},${input.adName ?? null},
       ${transaction.json(JSON.parse(JSON.stringify(input.customFields ?? {})))},${assigneeId},clock_timestamp(),${store.id},${input.arrivedAt},${input.arrivedAt},${policy.id},${dueAt}
     )

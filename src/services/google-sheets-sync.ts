@@ -4,7 +4,7 @@ import { normalizeEmail, normalizePhone } from "@/domain/normalization";
 import { externalIdForSheetRow, googleSheetMappingSchema, parseSheetDate, readGoogleSheet, type GoogleSheetRow } from "@/integrations/google-sheets";
 import { ingestLead } from "@/services/lead-intake";
 
-interface ConnectionRow {
+export interface ConnectionRow {
   id: string; spreadsheet_id: string; sheet_name: string; header_row: number; mapping: unknown; created_by: string;
   import_after: Date; last_synced_row: number; last_full_check_at: Date | null;
 }
@@ -58,7 +58,7 @@ export async function syncGoogleSheetConnection(tenantId: string, connectionId?:
   }
 }
 
-async function persistRows(args: {
+export async function persistRows(args: {
   tenantId: string; connection: ConnectionRow; mapping: ReturnType<typeof googleSheetMappingSchema.parse>; rows: GoogleSheetRow[];
 }): Promise<GoogleSheetSyncResult> {
   return withTenant({ tenantId: args.tenantId, userRole: "system" }, async (transaction) => {

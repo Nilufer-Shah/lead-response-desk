@@ -1,11 +1,11 @@
-export function normalizePhone(raw: string): { phoneE164: string | null; isInternational: boolean } {
+export function normalizePhone(raw: string): { phoneE164: string | null } {
   let digits = raw.replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   if (digits.startsWith("0") && digits.length === 11) digits = digits.slice(1);
   if (digits.startsWith("9191") && digits.length === 14) digits = digits.slice(2);
   if (digits.length === 10) digits = `91${digits}`;
-  if (digits.length < 8 || digits.length > 15) return { phoneE164: null, isInternational: false };
-  return { phoneE164: `+${digits}`, isInternational: !digits.startsWith("91") };
+  if (digits.length < 8 || digits.length > 15) return { phoneE164: null };
+  return { phoneE164: `+${digits}` };
 }
 
 export function normalizeEmail(raw?: string | null): string | null {

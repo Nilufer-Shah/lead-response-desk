@@ -2,32 +2,42 @@
 
 ## Required before traffic
 
-- [ ] Approved public domain points to the Mumbai VPS.
-- [ ] `.env` uses `NODE_ENV=production`, `DEMO_MODE=false`, the HTTPS `APP_URL`, and unique database passwords.
-- [ ] `SESSION_SECRET` is a random value of at least 32 characters.
-- [ ] `BOOTSTRAP_OWNER_EMAIL` and `BOOTSTRAP_OWNER_PASSWORD` are set to the real first owner credentials.
-- [ ] Google Sheets API is enabled in Google Cloud.
-- [ ] Service account email and private key are installed only in the server `.env`.
-- [ ] The active Sheet is shared as Viewer with the service account email.
-- [ ] Owner has saved and tested the Sheet URL, tab, header row, import cutoff and column mapping.
-- [ ] `GOOGLE_SHEETS_ENABLED=true`; `META_CONNECTION_ENABLED=false`.
-- [ ] Owner, salesperson and agency email/password sign-in is tested; production contains no demo users.
-- [ ] WhatsApp provider is configured, or stakeholders accept that automated WhatsApp messages remain disabled.
+- [ ] Approved domain points to the VPS; the domain purchase or DNS change was explicitly approved.
+- [ ] `.env` uses `NODE_ENV=production`, the HTTPS `APP_URL`, `APP_DOMAIN`, unique database passwords and a random 32+ character `SESSION_SECRET`.
+- [ ] Real `BOOTSTRAP_OWNER_EMAIL`, `BOOTSTRAP_OWNER_NAME` and `BOOTSTRAP_OWNER_PASSWORD` are set.
+- [ ] Google Sheets API is enabled; its service-account email/private key exist only in server `.env`.
+- [ ] The active Sheet is shared as Viewer and Owner has tested URL, tab, header, cutoff and mappings.
+- [ ] `GOOGLE_SHEETS_ENABLED=true`; keep `META_CONNECTION_ENABLED=false` until its separate checklist is complete.
+- [ ] Owner, salesperson and agency email/password access is tested.
 
 ## Deploy and verify
 
 ```sh
-npm ci
 NODE_ENV=production npm run launch:check -- --production
 docker compose up -d --build
+docker compose ps
 docker compose run --rm migrate npm run db:verify
 curl -fsS https://YOUR_APPROVED_DOMAIN/api/health
 ```
 
-- [ ] Sign in as Salesperson and complete Call, WhatsApp, quick note, follow-up and outcome flows on a test lead.
-- [ ] Sign in as Owner and verify Dashboard, Today, Leads, Settings, user management and mobile navigation.
-- [ ] Sign in as Agency and confirm the dashboard is read-only.
-- [ ] Run **Sync now** in Settings and confirm a new Sheet row appears once in the inbox.
-- [ ] Confirm a second sync reports the same row as unchanged rather than adding a duplicate.
-- [ ] Confirm web, worker, Postgres, and Caddy containers are healthy and configured to restart.
-- [ ] Keep Meta deferred until its separate connection and verification window.
+- [ ] PostgreSQL, web, worker and Caddy are healthy and restart automatically.
+- [ ] Owner creates two salespeople; a new Sheet row alternates assignment.
+- [ ] Historic Sheet rows before the cutoff are skipped.
+- [ ] Salesperson tests Call, WhatsApp, quick note, follow-up and outcome flows on a phone.
+- [ ] “Yes” without a same-day contact tap is blocked.
+- [ ] Gated Dead/Bad outcomes are blocked until two attempts on two days.
+- [ ] Won cancels pending follow-ups.
+- [ ] Dormant repeat enquiry reactivates the lead.
+- [ ] Salesperson cannot see another salesperson’s leads; Agency cannot modify data.
+- [ ] Today, 7-day and 30-day dashboard values match the controlled test dataset.
+- [ ] `owner:reset-password` is tested, then its one-time environment value is removed.
+
+## Meta activation (later)
+
+- [ ] App belongs to the client’s Business Manager.
+- [ ] System-user token has `leads_retrieval`, `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `ads_read`.
+- [ ] Page Leads Access is granted and Page is subscribed to `leadgen`.
+- [ ] HTTPS callback and verify token succeed.
+- [ ] Form IDs/mappings are saved and **Test connection** passes.
+- [ ] Lead Ads Testing Tool creates exactly one lead.
+- [ ] `META_CONNECTION_ENABLED=true`; web and worker restarted; health remains OK.

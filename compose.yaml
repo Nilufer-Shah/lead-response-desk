@@ -39,15 +39,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://lead_desk_app:${POSTGRES_APP_PASSWORD:-lead_desk_app}@postgres:5432/lead_desk
-      WEBHOOK_SPOOL_DIR: /var/spool/lead-desk
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    volumes:
-      - webhook_spool:/var/spool/lead-desk
-      - reports:/var/lib/lead-desk/reports
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
@@ -63,15 +59,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://lead_desk_app:${POSTGRES_APP_PASSWORD:-lead_desk_app}@postgres:5432/lead_desk
-      WEBHOOK_SPOOL_DIR: /var/spool/lead-desk
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    volumes:
-      - webhook_spool:/var/spool/lead-desk
-      - reports:/var/lib/lead-desk/reports
     restart: unless-stopped
 
   caddy:
@@ -92,7 +84,5 @@ services:
 
 volumes:
   postgres_data:
-  webhook_spool:
   caddy_data:
   caddy_config:
-  reports:

@@ -18,6 +18,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!lead || !assignee) return null;
     await transaction`UPDATE app.leads SET assigned_to = ${assignee.id}, assigned_at = clock_timestamp() WHERE tenant_id = ${user.tenantId} AND id = ${id}`;
     await transaction`
+      UPDATE app.lead_followups SET assigned_to = ${assignee.id}
+      WHERE tenant_id = ${user.tenantId} AND lead_id = ${id} AND status = 'pending'
+    `;
+    await transaction`
       INSERT INTO app.lead_events (tenant_id, lead_id, event_type, actor_id, actor_type, payload)
       VALUES (${user.tenantId}, ${id}, 'lead_reassigned', ${user.id}, 'user', ${transaction.json({ fromUserId: lead.assigned_to, toUserId: assignee.id, reason: parsed.data.reason, slaDueAtUnchanged: lead.sla_due_at, breachUnchanged: lead.sla_breached })})
     `;

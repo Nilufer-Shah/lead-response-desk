@@ -11,7 +11,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (user.role === "agency") return NextResponse.json({ error: "Agency access is read-only" }, { status: 403 });
   const { id } = await context.params;
   const parsed = schema.safeParse(await request.json());
-  if (!z.string().uuid().safeParse(id).success || !parsed.success) return NextResponse.json({ error: parsed.error?.issues[0]?.message ?? "Follow-up response is invalid" }, { status: 400 });
+  if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Follow-up id is invalid" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Follow-up response is invalid" }, { status: 422 });
   const result = await withTenant(user, async (transaction) => {
     const [followup] = await transaction<{ id: string; lead_id: string; day_number: number; status: string }[]>`
       SELECT f.id,f.lead_id,f.day_number,f.status::text

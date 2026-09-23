@@ -42,9 +42,7 @@ export function addBusinessMinutes(start: Date, amount: number, hours: DailyHour
   return cursor;
 }
 
-export function computeSlaDueAt(input: { receivedAt: Date; isInternational: boolean; targetMinutes?: number; hours: DailyHours[]; holidays?: Holiday[] }): Date {
+export function computeSlaDueAt(input: { receivedAt: Date; targetMinutes?: number; hours: DailyHours[]; holidays?: Holiday[] }): Date {
   const target = input.targetMinutes ?? 5;
-  return input.isInternational
-    ? new Date(input.receivedAt.getTime() + target * minute)
-    : addBusinessMinutes(input.receivedAt, target, input.hours, input.holidays);
+  return addBusinessMinutes(input.receivedAt, target, input.hours, input.holidays);
 }

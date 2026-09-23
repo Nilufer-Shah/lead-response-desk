@@ -7,4 +7,4 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/((?!api/auth/login|api/health|api/webhooks|login|_next|favicon.ico|icon.svg|roopkala-logo.webp|manifest.webmanifest|sw.js|og.png).*)"] };
+export const config = { matcher: ["/((?!api/auth/login|api/health|api/webhooks|login|_next|favicon.ico|icon.svg|roopkala-logo.webp|og.png).*)"] };

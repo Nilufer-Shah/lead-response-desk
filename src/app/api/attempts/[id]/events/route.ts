@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withTenant } from "@/db";
-import { env } from "@/lib/env";
 import { readSession } from "@/lib/auth";
 
 const eventTypes = ["disposition_logged", "whatsapp_queued", "whatsapp_sent", "whatsapp_delivered", "whatsapp_read", "whatsapp_replied", "whatsapp_failed", "duration_reported", "note_added"] as const;
@@ -15,8 +14,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Attempt ID is invalid" }, { status: 400 });
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Attempt event is invalid" }, { status: 400 });
-  if (env().DEMO_MODE === "true") return NextResponse.json({ id: crypto.randomUUID(), ...parsed.data, occurredAt: new Date().toISOString() }, { status: 201 });
-
   const created = await withTenant(user, async (transaction) => {
     const [attempt] = await transaction<{ id: string; lead_id: string }[]>`SELECT id, lead_id FROM app.attempts WHERE tenant_id = ${user.tenantId} AND id = ${id}`;
     if (!attempt) return null;

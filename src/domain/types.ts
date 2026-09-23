@@ -6,8 +6,6 @@ export const leadSources = [
 
 export type LeadSource = (typeof leadSources)[number];
 export type AttemptChannel = "call" | "whatsapp" | "sms" | "email" | "in_person";
-export type QualityFlag = "unrated" | "good" | "invalid_number" | "wrong_person" | "out_of_area" | "budget_mismatch" | "competitor" | "spam" | "duplicate";
-export type CloseReason = "bought" | "bought_elsewhere" | "price_too_high" | "out_of_area" | "just_browsing" | "unreachable" | "wrong_number" | "invalid_number" | "duplicate" | "spam" | "no_response";
 
 export interface AttemptEvidence {
   channel: AttemptChannel;

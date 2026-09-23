@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, FileSpreadsheet, KeyRound, Plus, Radio, RefreshCw, Save, Trash2, Upload, UserPlus, UsersRound } from "lucide-react";
+import { CheckCircle2, Clock3, FileSpreadsheet, KeyRound, Plus, Radio, RefreshCw, Save, Trash2, UserPlus, UsersRound } from "lucide-react";
 
 const defaultMapping = { externalId: "external_id", metaLeadId: "meta_lead_id", createdAt: "created_at", fullName: "name", phone: "phone", email: "email", city: "city", campaignName: "campaign", adName: "ad" };
 type Mapping = typeof defaultMapping;
@@ -38,7 +38,6 @@ export function AdminConsole() {
 
   async function sheetAction(action: "save" | "test" | "sync") { setBusy(true); const endpoint = action === "save" ? "/api/integrations/google-sheets" : `/api/integrations/google-sheets/${action}`; const payload = { ...sheetForm, importAfter: sheetForm.importAfter ? new Date(sheetForm.importAfter).toISOString() : undefined }; const response = await fetch(endpoint, { method: action === "save" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const value = await response.json() as Record<string, unknown>; setMessage(response.ok ? action === "test" ? `Connected: ${value.rowCount} rows found.` : action === "sync" ? `${value.inserted} new, ${value.repeats} repeats, ${value.unchanged} unchanged, ${value.skipped} skipped.` : "Google Sheet settings saved" : String(value.error ?? "Google Sheet action failed")); setBusy(false); if (response.ok) await load(); }
   async function saveStore(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); const response = await fetch("/api/settings/store-hours", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(store) }); const value = await response.json() as { error?: string }; setMessage(response.ok ? "Store hours and cadence saved" : value.error ?? "Could not save hours"); }
-  async function importCsv(file?: File) { if (!file) return; const body = new FormData(); body.set("file", file); const response = await fetch("/api/imports/csv", { method: "POST", body }); const value = await response.json(); setMessage(response.ok ? `${value.inserted ?? value.valid ?? 0} leads imported or validated.` : value.error); }
   async function metaAction(action: "save" | "test") { setBusy(true); const response = await fetch(action === "save" ? "/api/integrations/meta" : "/api/integrations/meta/test", { method: action === "save" ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: action === "save" ? JSON.stringify({ forms: metaForms }) : undefined }); const value = await response.json() as Record<string, unknown>; setMessage(response.ok ? action === "save" ? "Meta form settings saved" : `Meta connected as ${String(value.detail ?? "system user")}` : String(value.error ?? "Meta action failed")); setBusy(false); if (response.ok) await load(); }
   function updateMetaForm(index: number, next: MetaForm) { setMetaForms(metaForms.map((form, position) => position === index ? next : form)); }
 
@@ -58,7 +57,5 @@ export function AdminConsole() {
       <div className="sheet-actions"><button onClick={() => setMetaForms([...metaForms,newMetaForm()])}><Plus />Add form</button><button disabled={busy || metaForms.some((form) => !form.formId || !form.name)} onClick={() => void metaAction("save")}><Save />Save forms</button><button disabled={busy || !meta?.credentialsConfigured} onClick={() => void metaAction("test")}><CheckCircle2 />Test connection</button></div>
       {meta?.connection?.last_reconciliation_result && <p className="admin-note">Latest result: {JSON.stringify(meta.connection.last_reconciliation_result)}</p>}
     </section>
-
-    <section className="panel admin-card" id="imports"><header><Upload /><div><h2>CSV import</h2><p>Manual one-off intake</p></div></header><label className="upload-box"><Upload /><strong>Select CSV</strong><input type="file" accept=".csv,text/csv" onChange={(event) => void importCsv(event.target.files?.[0])} /></label></section>
   </div>;
 }

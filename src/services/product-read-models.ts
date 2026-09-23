@@ -31,8 +31,7 @@ export async function getTodayQueue(user: SessionUser): Promise<TodayQueueData> 
   return withTenant(user, async (transaction) => {
     const newRows = await transaction<QueueRow[]>`
       SELECT l.id,l.full_name,l.phone_e164,l.city,l.campaign_name,l.ad_name,l.source::text,u.display_name AS owner,l.stage::text,l.received_at,
-        CASE WHEN l.is_international THEN GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-l.received_at))/60)::integer)
-          ELSE app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,clock_timestamp()) END AS elapsed_minutes,
+        app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,clock_timestamp()) AS elapsed_minutes,
         NULL::uuid AS followup_id,NULL::integer AS day_number,NULL::text AS followup_status
       FROM app.leads l
       LEFT JOIN app.users u ON u.tenant_id=l.tenant_id AND u.id=l.assigned_to
@@ -41,8 +40,7 @@ export async function getTodayQueue(user: SessionUser): Promise<TodayQueueData> 
     `;
     const followupRows = await transaction<QueueRow[]>`
       SELECT l.id,l.full_name,l.phone_e164,l.city,l.campaign_name,l.ad_name,l.source::text,u.display_name AS owner,l.stage::text,l.received_at,
-        CASE WHEN l.is_international THEN GREATEST(0,floor(extract(epoch FROM (COALESCE(l.first_contacted_at,clock_timestamp())-l.received_at))/60)::integer)
-          ELSE app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,COALESCE(l.first_contacted_at,clock_timestamp())) END AS elapsed_minutes,
+        app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,COALESCE(l.first_contacted_at,clock_timestamp())) AS elapsed_minutes,
         f.id AS followup_id,f.day_number,f.status::text AS followup_status
       FROM app.lead_followups f
       JOIN app.leads l ON l.tenant_id=f.tenant_id AND l.id=f.lead_id
@@ -79,8 +77,7 @@ export async function getLeadList(user: SessionUser): Promise<LeadListItem[]> {
   return withTenant(user, async (transaction) => {
     const rows = await transaction<(QueueRow & { attempt_count: number; first_response_minutes: number | null; outcome_reason: string | null })[]>`
       SELECT l.id,l.full_name,l.phone_e164,l.city,l.campaign_name,l.ad_name,l.source::text,u.display_name AS owner,l.stage::text,l.received_at,
-        CASE WHEN l.is_international THEN GREATEST(0,floor(extract(epoch FROM (COALESCE(l.first_contacted_at,clock_timestamp())-l.received_at))/60)::integer)
-          ELSE app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,COALESCE(l.first_contacted_at,clock_timestamp())) END AS elapsed_minutes,
+        app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,COALESCE(l.first_contacted_at,clock_timestamp())) AS elapsed_minutes,
         NULL::uuid AS followup_id,NULL::integer AS day_number,NULL::text AS followup_status,l.attempt_count,l.first_response_minutes,l.outcome_reason
       FROM app.leads l LEFT JOIN app.users u ON u.tenant_id=l.tenant_id AND u.id=l.assigned_to
       WHERE l.tenant_id=${user.tenantId} ORDER BY l.received_at DESC LIMIT 1000
@@ -104,8 +101,7 @@ export async function getLeadDetail(user: SessionUser, leadId: string): Promise<
   return withTenant(user, async (transaction) => {
     const [lead] = await transaction<(QueueRow & { attempt_count: number; first_response_minutes: number | null; outcome_reason: string | null })[]>`
       SELECT l.id,l.full_name,l.phone_e164,l.city,l.campaign_name,l.ad_name,l.source::text,u.display_name AS owner,l.stage::text,l.received_at,
-        CASE WHEN l.is_international THEN GREATEST(0,floor(extract(epoch FROM (COALESCE(l.first_contacted_at,clock_timestamp())-l.received_at))/60)::integer)
-          ELSE app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,COALESCE(l.first_contacted_at,clock_timestamp())) END AS elapsed_minutes,
+        app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,COALESCE(l.first_contacted_at,clock_timestamp())) AS elapsed_minutes,
         NULL::uuid AS followup_id,NULL::integer AS day_number,NULL::text AS followup_status,l.attempt_count,l.first_response_minutes,l.outcome_reason
       FROM app.leads l LEFT JOIN app.users u ON u.tenant_id=l.tenant_id AND u.id=l.assigned_to
       WHERE l.tenant_id=${user.tenantId} AND l.id=${leadId}
@@ -171,8 +167,7 @@ export async function getProductDashboard(user: SessionUser, period: DashboardPe
     const [live] = await transaction<{ untouched: number; oldest_minutes: number | null; oldest_assignee: string | null; missed_today: number }[]>`
       SELECT
         count(*) FILTER (WHERE l.stage='new')::int AS untouched,
-        max(CASE WHEN l.is_international THEN GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-l.received_at))/60)::integer)
-          ELSE app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,clock_timestamp()) END) FILTER (WHERE l.stage='new')::int AS oldest_minutes,
+        max(app.business_minutes_between(l.tenant_id,l.store_id,l.received_at,clock_timestamp())) FILTER (WHERE l.stage='new')::int AS oldest_minutes,
         (SELECT u.display_name FROM app.leads ol LEFT JOIN app.users u ON u.tenant_id=ol.tenant_id AND u.id=ol.assigned_to WHERE ol.tenant_id=${user.tenantId} AND ol.stage='new' ORDER BY ol.received_at LIMIT 1) AS oldest_assignee,
         (SELECT count(*)::int FROM app.lead_followups f JOIN app.leads fl ON fl.tenant_id=f.tenant_id AND fl.id=f.lead_id WHERE f.tenant_id=${user.tenantId} AND f.status='missed' AND f.due_date=(clock_timestamp() AT TIME ZONE 'Asia/Kolkata')::date) AS missed_today
       FROM app.leads l WHERE l.tenant_id=${user.tenantId}
@@ -196,9 +191,9 @@ export async function getProductDashboard(user: SessionUser, period: DashboardPe
         count(l.id) FILTER (WHERE (l.received_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN b.start_date AND b.end_date AND l.first_response_minutes<=5)::int AS within_five,
         count(l.id) FILTER (WHERE (l.received_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN b.start_date AND b.end_date AND l.first_response_minutes IS NOT NULL)::int AS touched,
         count(l.id) FILTER (WHERE (l.received_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN b.start_date AND b.end_date AND l.first_contacted_at IS NULL)::int AS untouched,
-        (SELECT count(*)::int FROM app.lead_followups f JOIN app.leads fl ON fl.tenant_id=f.tenant_id AND fl.id=f.lead_id WHERE f.tenant_id=${user.tenantId} AND fl.assigned_to=s.id AND f.due_date BETWEEN b.start_date AND b.end_date AND f.status<>'cancelled') AS followups_due,
-        (SELECT count(*)::int FROM app.lead_followups f JOIN app.leads fl ON fl.tenant_id=f.tenant_id AND fl.id=f.lead_id WHERE f.tenant_id=${user.tenantId} AND fl.assigned_to=s.id AND f.due_date BETWEEN b.start_date AND b.end_date AND f.status='done') AS followups_done,
-        (SELECT count(*)::int FROM app.lead_followups f JOIN app.leads fl ON fl.tenant_id=f.tenant_id AND fl.id=f.lead_id WHERE f.tenant_id=${user.tenantId} AND fl.assigned_to=s.id AND f.due_date BETWEEN b.start_date AND b.end_date AND f.status='missed') AS followups_missed,
+        (SELECT count(*)::int FROM app.lead_followups f WHERE f.tenant_id=${user.tenantId} AND f.assigned_to=s.id AND f.due_date BETWEEN b.start_date AND b.end_date AND f.status<>'cancelled') AS followups_due,
+        (SELECT count(*)::int FROM app.lead_followups f WHERE f.tenant_id=${user.tenantId} AND f.assigned_to=s.id AND f.due_date BETWEEN b.start_date AND b.end_date AND f.status='done') AS followups_done,
+        (SELECT count(*)::int FROM app.lead_followups f WHERE f.tenant_id=${user.tenantId} AND f.assigned_to=s.id AND f.due_date BETWEEN b.start_date AND b.end_date AND f.status='missed') AS followups_missed,
         count(l.id) FILTER (WHERE l.stage='dormant' AND (l.updated_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN b.start_date AND b.end_date)::int AS dormant,
         count(l.id) FILTER (WHERE l.stage='won' AND (l.closed_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN b.start_date AND b.end_date)::int AS won,
         count(l.id) FILTER (WHERE l.stage='dead' AND (l.closed_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN b.start_date AND b.end_date)::int AS dead,

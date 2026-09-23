@@ -17,15 +17,13 @@ describe("production application contract", () => {
     expect(source).toContain("context.userRole ?? context.role");
   });
 
-  it("does not cache authenticated pages or APIs in the service worker", () => {
-    const worker = read("public/sw.js");
-    expect(worker.replaceAll("\n", " ")).not.toMatch(/SHELL\s*=\s*\[[^\]]*\/today/);
-    expect(worker).toContain('event.request.mode === "navigate"');
-    expect(worker).not.toContain("cache.put(event.request");
+  it("ships no service worker or offline mutation queue", () => {
+    expect(() => read("public/sw.js")).toThrow();
+    expect(() => read("src/lib/offline-queue.ts")).toThrow();
   });
 
   it("contains no out-of-scope product or client names", () => {
-    const files = ["src/services/weekly-report.ts", "README.md"];
+    const files = ["README.md"];
     for (const file of files) expect(read(file)).not.toMatch(/inflex|arya|revenue os/i);
   });
 
@@ -38,5 +36,17 @@ describe("production application contract", () => {
   it("uses password hashes and has no OTP sign-in endpoints", () => {
     expect(read("src/app/api/auth/login/route.ts")).toContain('from "bcryptjs"');
     expect(read("src/lib/auth.ts")).toContain("sessionId");
+  });
+
+  it("opens phone links synchronously while recording attempts in the background", () => {
+    for (const component of ["src/components/today-queue.tsx", "src/components/lead-detail.tsx"]) {
+      const source = read(component);
+      expect(source).toContain("href={`tel:");
+      expect(source).toContain("href={`https://wa.me/");
+      expect(source).toContain("navigator.sendBeacon");
+      expect(source).toContain("keepalive: true");
+      expect(source).not.toMatch(/await\s+recordAttempt/);
+    }
+    expect(read("src/components/today-queue.tsx")).toContain("Quick note");
   });
 });
