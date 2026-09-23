@@ -13,14 +13,18 @@ export function LoginForm() {
   async function login(event: React.FormEvent) {
     event.preventDefault();
     setError(""); setBusy(true);
-    const response = await fetch("/api/auth/login", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json() as { error?: string; redirectTo?: string };
-    setBusy(false);
-    if (!response.ok) return setError(data.error ?? "Sign-in failed");
-    window.location.assign(data.redirectTo ?? "/");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const body = await response.text();
+      const data = body ? JSON.parse(body) as { error?: string; redirectTo?: string } : {};
+      if (!response.ok) return setError(data.error ?? "The sign-in service is temporarily unavailable");
+      window.location.assign(data.redirectTo ?? "/");
+    } catch {
+      setError("The sign-in service is temporarily unavailable. Please try again.");
+    } finally { setBusy(false); }
   }
 
   return <main className="login-page"><section className="login-brand"><div className="login-logo-lockup"><span className="login-logo-crop"><Image src="/roopkala-logo.webp" alt="Roopkala" width={609} height={336} priority unoptimized /></span><p>Roopkala Lead Desk</p></div><h1>Every lead.<br />Every touch.<br /><span>On the clock.</span></h1><div className="login-proof"><CheckCircle2 /><span>Server timestamps</span><CheckCircle2 /><span>Immutable activity history</span><CheckCircle2 /><span>Business-hours response timing</span></div></section>

@@ -12,7 +12,7 @@ const schema = z.object({
 
 const DUMMY_HASH = "$2b$12$0.XjBodkhxsQSCQ4lMZ9De8eYKqS9nH/OK9mSFPQY4YwV48Qx9e0y";
 
-export async function POST(request: Request) {
+async function handleLogin(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid email and password" }, { status: 400 });
   const settings = env();
@@ -56,4 +56,12 @@ export async function POST(request: Request) {
     maxAge: 60 * 60 * 24 * 30, path: "/",
   });
   return response;
+}
+
+export async function POST(request: Request) {
+  try { return await handleLogin(request); }
+  catch (error) {
+    console.error("Login service unavailable", error);
+    return NextResponse.json({ error: "The sign-in service is temporarily unavailable" }, { status: 503 });
+  }
 }
