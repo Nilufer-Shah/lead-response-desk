@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withTenant } from "@/db";
-import { env } from "@/lib/env";
 import { readSession } from "@/lib/auth";
 
 const schema = z.object({ body: z.string().trim().min(1).max(5000), clientInitiatedAt: z.string().datetime().nullable().optional() });
@@ -15,8 +14,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Note is invalid" }, { status: 400 });
   const clientTime = parsed.data.clientInitiatedAt ? new Date(parsed.data.clientInitiatedAt) : null;
-  if (env().DEMO_MODE === "true") return NextResponse.json({ id: crypto.randomUUID(), createdAt: new Date().toISOString() }, { status: 201 });
-
   const [note] = await withTenant(user, (transaction) => transaction<{ id: string; created_at: Date }[]>`
     INSERT INTO app.notes (tenant_id, lead_id, user_id, body, client_initiated_at, device, ip)
     VALUES (

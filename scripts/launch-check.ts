@@ -11,17 +11,15 @@ if (production) {
   if (config.APP_URL.includes("localhost")) errors.push("APP_URL must use the approved public domain");
   if (config.SESSION_SECRET.includes("development-only") || config.SESSION_SECRET.includes("replace-with")) errors.push("SESSION_SECRET must be replaced");
   if (config.DATABASE_URL.includes("localhost")) warnings.push("DATABASE_URL points to localhost; this is valid only when the check runs inside the Compose network");
-  if (config.OTP_DELIVERY_MODE === "console") errors.push("OTP_DELIVERY_MODE cannot be console in production");
-  if (!config.SMTP_URL) errors.push("SMTP_URL is required for owner, manager, agency, and admin magic links");
-  if (!config.SMS_WEBHOOK_URL) errors.push("SMS_WEBHOOK_URL is required for salesperson phone OTP delivery");
-  if (!config.BOOTSTRAP_ADMIN_EMAIL) errors.push("BOOTSTRAP_ADMIN_EMAIL is required so the first administrator can sign in");
+  if (!config.BOOTSTRAP_OWNER_EMAIL) errors.push("BOOTSTRAP_OWNER_EMAIL is required so the first owner can sign in");
+  if (!config.BOOTSTRAP_OWNER_PASSWORD) errors.push("BOOTSTRAP_OWNER_PASSWORD is required for first deployment");
   if (config.REPORTS_DIR.startsWith("/tmp")) errors.push("REPORTS_DIR must use persistent storage in production");
   if (!process.env.POSTGRES_OWNER_PASSWORD || process.env.POSTGRES_OWNER_PASSWORD.startsWith("replace")) errors.push("POSTGRES_OWNER_PASSWORD must be replaced");
   if (!process.env.POSTGRES_APP_PASSWORD || process.env.POSTGRES_APP_PASSWORD.startsWith("replace")) errors.push("POSTGRES_APP_PASSWORD must be replaced");
 }
 if (config.GOOGLE_SHEETS_ENABLED === "true" && (!config.GOOGLE_SERVICE_ACCOUNT_EMAIL || !config.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY)) errors.push("Google Sheets is enabled but service account credentials are incomplete");
 if (config.META_CONNECTION_ENABLED === "true") errors.push("Meta must remain disabled until the final connection stage");
-if (config.WHATSAPP_PROVIDER === "disabled") warnings.push("WhatsApp delivery is disabled; call actions still work, but automated WhatsApp delivery will not send");
+if (config.WHATSAPP_PROVIDER === "disabled") warnings.push("Automated WhatsApp delivery is disabled; tap-to-open WhatsApp still works");
 
 process.stdout.write(`Launch preflight (${production ? "production" : "development"})\n`);
 process.stdout.write(`- app: ${config.APP_URL}\n- demo mode: ${config.DEMO_MODE}\n- Google Sheets: ${config.GOOGLE_SHEETS_ENABLED === "true" ? "enabled" : "disabled"}\n- Meta: deferred\n`);

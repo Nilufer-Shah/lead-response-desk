@@ -22,9 +22,9 @@ npm ci
 npm run dev
 ```
 
-Demo mode exposes role-based sample access. Production mode (`DEMO_MODE=false`) requires authenticated sessions and tenant context.
+The application always authenticates against PostgreSQL with email and bcrypt-hashed passwords. Demo data is loaded only by the explicit `npm run db:seed` command, which refuses to run in production.
 
-On a fresh production database the migration service also runs `db:bootstrap`. It creates or reactivates exactly one administrator from `BOOTSTRAP_ADMIN_EMAIL` without loading demo leads. That administrator signs in by email magic link and can add staff, owners, managers, agency viewers, and additional administrators from Settings.
+On a fresh production database the migration service also runs `db:bootstrap`. It creates or reactivates one owner from `BOOTSTRAP_OWNER_EMAIL` and `BOOTSTRAP_OWNER_PASSWORD` without loading demo leads. The owner can create owner, salesperson and read-only agency accounts and reset their passwords from Settings. An emergency owner reset is available with `OWNER_RESET_PASSWORD=... npm run owner:reset-password`.
 
 ## Live Google Sheets intake
 
@@ -33,12 +33,12 @@ The connection uses a Google Cloud service account and read-only Sheets access. 
 1. Create a Google Cloud project, enable the Google Sheets API, and create a service account with a JSON key.
 2. Put the service account `client_email` and `private_key` into `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` in `.env`.
 3. Share the active Google Sheet as **Viewer** with the service account email.
-4. Set `GOOGLE_SHEETS_ENABLED=true`, restart the web and worker services, then sign in as Owner or Admin.
-5. Open Settings → Live Google Sheets intake. Enter the Sheet URL, tab name, header row, and column names. Test the connection before enabling automatic sync.
+4. Set `GOOGLE_SHEETS_ENABLED=true`, restart the web and worker services, then sign in as Owner.
+5. Open Settings → Live Google Sheet intake. Enter the Sheet URL, tab name, header row, import cutoff and column names. Test the connection before enabling automatic sync.
 
-The worker checks the sheet every minute by default. It never edits the Sheet. Rows receive deterministic external IDs, so moving a row does not duplicate it. Existing phone numbers are recorded as repeat enquiries. New rows use the canonical `csv_import` source and retain Google Sheet, tab, row, and content-hash provenance in `custom_fields`.
+The worker checks new rows every minute by default and performs a full recovery scan every six hours. It never edits the Sheet and has no row cap. Rows receive deterministic external IDs, so moving a row does not duplicate it. Repeats follow the open/dormant/closed lead rules. New rows use the canonical `csv_import` source, use Sheet `created_at` as arrival time, and retain Sheet, tab, row and content-hash provenance.
 
-Expected default columns are `external_id`, `created_at`, `name`, `phone`, `email`, `city`, `campaign`, and `ad`. Only a phone or email is mandatory. A stable `external_id` is recommended; when it is absent, the connector derives one from phone/email and creation time.
+Expected default columns are `external_id`, `meta_lead_id`, `created_at`, `name`, `phone`, `email`, `city`, `campaign`, and `ad`. Only a phone or email is mandatory. A stable `external_id` is recommended; when it is absent, the connector derives one from phone/email and creation time.
 
 ## Verification
 

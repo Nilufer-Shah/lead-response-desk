@@ -1,64 +1,108 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, ChevronRight, Clock3, LogOut, PhoneCall, Target, UsersRound } from "lucide-react";
+import { BellRing, Check, ChevronRight, Clock3, MessageCircle, NotebookPen, PhoneCall, RefreshCw, Volume2 } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
-import type { LeadCard } from "@/domain/read-models";
-import { flushOfflineQueue, queueOfflineMutation } from "@/lib/offline-queue";
+import type { QueueLead, TodayQueueData } from "@/services/product-read-models";
 import { MobileBottomNav } from "@/components/app-navigation";
 
-function formatTimer(seconds: number) {
-  const prefix = seconds < 0 ? "+" : "";
-  const absolute = Math.abs(seconds);
-  return `${prefix}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
+function timer(minutes: number) {
+  if (minutes < 5) return `${Math.max(0, 5 - minutes)}m left`;
+  return `+${minutes - 5}m overdue`;
 }
 
-export function TodayQueue({ user, initialLeads }: { user: SessionUser; initialLeads: LeadCard[] }) {
-  const [tick, setTick] = useState(0);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [leads, setLeads] = useState(initialLeads);
-  const isStaff = user.role === "salesperson";
-  const roleLabel = isStaff ? "Salesperson" : user.role === "admin" ? "Administrator" : user.role === "owner" ? "Owner" : "Management";
-  const assigned = leads;
-  const urgent = assigned.filter((lead) => lead.state === "breach" || lead.state === "warn");
-  const due = assigned.filter((lead) => lead.stage !== "New").slice(0, 3);
-  const todayLabel = useMemo(() => new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long" }).format(new Date()), []);
+function recordAttempt(leadId: string, channel: "call" | "whatsapp") {
+  const body = JSON.stringify({ leadId, channel });
+  if (navigator.sendBeacon) navigator.sendBeacon("/api/attempts", new Blob([body], { type: "application/json" }));
+  else void fetch("/api/attempts", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true });
+}
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
-    const online = () => void flushOfflineQueue();
-    window.addEventListener("online", online);
-    return () => { clearInterval(timer); window.removeEventListener("online", online); };
-  }, []);
+function ContactActions({ lead }: { lead: QueueLead }) {
+  const number = lead.phone.replace(/\D/g, "");
+  return <div className="queue-contact-actions">
+    <a href={`tel:${lead.phone.replace(/\s/g, "")}`} onClick={() => recordAttempt(lead.id, "call")}><PhoneCall size={17} />Call</a>
+    <a href={`https://wa.me/${number}`} target="_blank" rel="noreferrer" onClick={() => recordAttempt(lead.id, "whatsapp")}><MessageCircle size={17} />WhatsApp</a>
+  </div>;
+}
 
-  async function logCall(leadId: string, phone: string) {
-    const body = { leadId, channel: "call" };
+function LeadRow({ lead, type, onFollowup, onNote }: { lead: QueueLead; type: "new" | "due" | "missed"; onFollowup: (lead: QueueLead) => void; onNote: (lead: QueueLead) => void }) {
+  return <article className={`queue-lead-row ${type}`}>
+    <Link href={`/leads/${lead.id}`} className="queue-lead-copy">
+      <span><strong>{lead.name}</strong><em>{type === "new" ? timer(lead.elapsedBusinessMinutes) : `Day ${lead.followupDay} follow-up`}</em></span>
+      <small>{lead.city} · {lead.campaign} · {lead.owner}</small>
+      <small>{lead.ad}</small>
+    </Link>
+    <ContactActions lead={lead} />
+    <div className="queue-row-buttons">
+      {lead.followupId && <button onClick={() => onFollowup(lead)}><Check size={15} />Log follow-up</button>}
+      <button onClick={() => onNote(lead)}><NotebookPen size={15} />Quick note</button>
+      <Link href={`/leads/${lead.id}`} aria-label={`Open ${lead.name}`}><ChevronRight size={18} /></Link>
+    </div>
+  </article>;
+}
+
+export function TodayQueue({ user, initialData }: { user: SessionUser; initialData: TodayQueueData }) {
+  const [data, setData] = useState(initialData);
+  const [busy, setBusy] = useState(false);
+  const [alerts, setAlerts] = useState(false);
+  const [dialog, setDialog] = useState<{ kind: "note" | "followup"; lead: QueueLead } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const previousNew = useRef(initialData.newLeads.length);
+
+  async function refresh() {
+    setBusy(true);
     try {
-      const response = await fetch("/api/attempts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      if (!response.ok) throw new Error();
-    } catch { await queueOfflineMutation("/api/attempts", body); }
-    const lead = assigned.find((item) => item.id === leadId);
-    setLeads((current) => current.map((item) => item.id === leadId ? { ...item, attempts: (lead?.attempts ?? 0) + 1 } : item));
-    setNotice("Call started. Log the outcome when you return.");
-    window.setTimeout(() => { window.location.href = `tel:${phone.replace(/\s/g, "")}`; }, 180);
+      const response = await fetch("/api/today", { cache: "no-store" });
+      if (!response.ok) return;
+      const next = await response.json() as TodayQueueData;
+      if (alerts && next.newLeads.length > previousNew.current) {
+        const context = new AudioContext(); const oscillator = context.createOscillator(); const gain = context.createGain();
+        oscillator.connect(gain); gain.connect(context.destination); oscillator.frequency.value = 720; gain.gain.value = .08;
+        oscillator.start(); oscillator.stop(context.currentTime + .2);
+      }
+      previousNew.current = next.newLeads.length;
+      setData(next);
+    } finally { setBusy(false); }
   }
 
-  const first = urgent[0] ?? assigned[0];
-  return <div className="phone-app staff-workspace">
-    <header className="staff-appbar"><Link href={isStaff ? "/today" : "/"}><span className="mobile-logo-crop"><Image src="/roopkala-logo.webp" alt="" width={609} height={336} unoptimized /></span><span><strong>Roopkala Lead Desk</strong><small>{user.name} · {roleLabel}</small></span></Link><form action="/api/auth/logout" method="post"><button aria-label="Switch account"><LogOut size={18} /></button></form></header>
-    <header className="mobile-head"><div><p>{todayLabel}</p><h1>{isStaff ? "My day" : "Priority queue"}</h1><span className="workspace-subtitle"><UsersRound size={14} />{assigned.length} {isStaff ? "assigned" : "open"} leads</span></div><div className="target-chip"><Target size={16} /><span>4 / 8</span><small>visits</small></div></header>
-    <section className="queue-progress"><span><strong>{urgent.length}</strong> need a response</span><span><strong>{due.length}</strong> follow-ups due</span><span><strong>1</strong> visit today</span></section>
+  useEffect(() => {
+    setAlerts(localStorage.getItem("lead-desk-alerts") === "on");
+    const id = window.setInterval(() => void refresh(), 30_000);
+    return () => window.clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts]);
 
-    <section className="mobile-section"><div className="section-row"><h2>Needs you now</h2><span className="urgent-count">{urgent.length} leads</span></div>
-      <div className="mobile-lead-list">{urgent.map((lead) => { const time = lead.timer - tick; const state = time < 0 ? "breach" : time < 120 ? "warn" : "calm"; return <Link href={`/leads/${lead.id}`} className={`mobile-lead ${state}`} key={lead.id}><span className="mobile-state-bar" /><span className="mobile-lead-copy"><strong>{lead.name}</strong><small>{lead.city} · {lead.campaign}</small><em>{lead.attempts ? `${lead.attempts} attempt${lead.attempts === 1 ? "" : "s"}` : "No attempt yet"}</em></span><time>{formatTimer(time)}</time><ChevronRight size={18} /></Link>; })}</div>
+  function enableAlerts() { localStorage.setItem("lead-desk-alerts", "on"); setAlerts(true); setMessage("Sound alerts enabled on this device"); }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!dialog) return;
+    const values = new FormData(event.currentTarget);
+    const endpoint = dialog.kind === "note" ? `/api/leads/${dialog.lead.id}/notes` : `/api/followups/${dialog.lead.followupId}`;
+    const body = dialog.kind === "note" ? { body: String(values.get("note") ?? "") } : { answer: values.get("answer"), note: values.get("note") };
+    const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setMessage(result.error ?? "Could not save");
+    setDialog(null); setMessage(dialog.kind === "note" ? "Note saved" : "Follow-up completed"); await refresh();
+  }
+
+  const total = data.newLeads.length + data.dueFollowups.length + data.missedFollowups.length;
+  return <div className="phone-app today-product">
+    <header className="mobile-head"><div><p>{user.name} · Sales desk</p><h1>Today</h1></div><button className="refresh-button" onClick={() => void refresh()} aria-label="Refresh"><RefreshCw size={19} className={busy ? "spinning" : ""} /></button></header>
+    {!alerts && <button className="alert-permission" onClick={enableAlerts}><Volume2 size={19} /><span><strong>Turn on lead alerts</strong><small>Hear a sound when a new lead arrives</small></span></button>}
+    <section className="today-summary"><span><BellRing size={16} />{total} actions</span><span><Clock3 size={16} />Store {data.storeOpen ? "open" : "closed"}</span><small>Refreshes every 30 seconds</small></section>
+
+    <section className="queue-section"><header><div><h2>New leads</h2><p>Oldest first · five business-minute target</p></div><b>{data.newLeads.length}</b></header>
+      {data.newLeads.length ? data.newLeads.map((lead) => <LeadRow key={lead.id} lead={lead} type="new" onFollowup={(item) => setDialog({ kind: "followup", lead: item })} onNote={(item) => setDialog({ kind: "note", lead: item })} />) : <p className="queue-empty">No untouched leads. You are caught up.</p>}
     </section>
-
-    <section className="mobile-section"><div className="section-row"><h2>Due today</h2><Link href="/leads?view=contacted">See all</Link></div>{due.map((lead) => <Link href={`/leads/${lead.id}`} className="due-row" key={lead.id}><CalendarClock size={18} /><span><strong>{lead.name}</strong><small>{lead.followup}</small></span><ChevronRight size={17} /></Link>)}</section>
-    <section className="mobile-section"><div className="section-row"><h2>Waiting on lead</h2><span>1</span></div><div className="quiet-empty"><Clock3 size={18} /><span>Anjali D. · WhatsApp delivered</span><small>3d</small></div></section>
-    {notice && <div className="saved-toast queue-toast"><CheckCircle2 size={17} />{notice}</div>}
-    {first && <div className="call-next"><button onClick={() => void logCall(first.id, first.phone)}><PhoneCall size={21} />Call next <span>{first.name}</span></button></div>}
+    <section className="queue-section"><header><div><h2>Due today</h2><p>Complete after the conversation</p></div><b>{data.dueFollowups.length}</b></header>
+      {data.dueFollowups.length ? data.dueFollowups.map((lead) => <LeadRow key={lead.followupId} lead={lead} type="due" onFollowup={(item) => setDialog({ kind: "followup", lead: item })} onNote={(item) => setDialog({ kind: "note", lead: item })} />) : <p className="queue-empty">No follow-ups due today.</p>}
+    </section>
+    <section className="queue-section missed"><header><div><h2>Missed</h2><p>Still needs an answer</p></div><b>{data.missedFollowups.length}</b></header>
+      {data.missedFollowups.length ? data.missedFollowups.map((lead) => <LeadRow key={lead.followupId} lead={lead} type="missed" onFollowup={(item) => setDialog({ kind: "followup", lead: item })} onNote={(item) => setDialog({ kind: "note", lead: item })} />) : <p className="queue-empty">No missed follow-ups.</p>}
+    </section>
+    {message && <button className="saved-toast" onClick={() => setMessage(null)}><Check size={16} />{message}</button>}
+    {dialog && <div className="sheet-backdrop" onClick={() => setDialog(null)}><form className="action-sheet queue-sheet" onSubmit={submit} onClick={(event) => event.stopPropagation()}><header><div><small>{dialog.lead.name}</small><h2>{dialog.kind === "note" ? "Add a quick note" : `Day ${dialog.lead.followupDay} follow-up`}</h2></div></header>{dialog.kind === "followup" && <label>Did you speak with the lead?<select name="answer" required defaultValue=""><option value="" disabled>Select</option><option value="yes">Yes</option><option value="no">No</option></select></label>}<label>Note<textarea name="note" minLength={dialog.kind === "followup" ? 10 : 1} required placeholder="What happened and what comes next?" /></label><button className="primary-form-button">Save</button></form></div>}
     <MobileBottomNav active="/today" user={user} />
   </div>;
 }

@@ -15,6 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:bootstrap": "tsx scripts/bootstrap.ts",
+    "owner:reset-password": "tsx scripts/reset-owner-password.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:verify": "tsx scripts/verify-db.ts",
     "launch:check": "tsx scripts/launch-check.ts",
@@ -23,6 +24,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-table": "^9.2.4",
+    "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "csv-parse": "^7.0.2",

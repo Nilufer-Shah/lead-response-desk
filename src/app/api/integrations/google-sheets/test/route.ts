@@ -5,7 +5,7 @@ import { readSession } from "@/lib/auth";
 export async function POST(request: Request) {
   const user = await readSession();
   if (!user) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
-  if (user.role !== "owner" && user.role !== "admin") return NextResponse.json({ error: "Owner or admin access required" }, { status: 403 });
+  if (user.role !== "owner") return NextResponse.json({ error: "Owner access required" }, { status: 403 });
   if (!googleCredentialsConfigured()) return NextResponse.json({ error: "Add the Google service account email and private key to the server first" }, { status: 409 });
   const parsed = googleSheetConnectionInputSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid settings" }, { status: 400 });

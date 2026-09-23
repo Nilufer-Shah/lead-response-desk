@@ -1,155 +1,74 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowLeft, CalendarPlus, Check, ChevronDown, CircleX, ImageOff, MapPin, MessageCircle, NotebookPen, PhoneCall, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, Check, ChevronRight, MessageCircle, NotebookPen, PhoneCall, RefreshCw, UserRoundCog, X } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
-import type { LeadCard, TimelineItem } from "@/domain/read-models";
-import { queueOfflineMutation } from "@/lib/offline-queue";
+import type { LeadDetailData } from "@/services/product-read-models";
 import { MobileBottomNav } from "@/components/app-navigation";
 
-const dispositions = ["Connected", "No answer", "Busy", "Switched off", "Invalid number", "Call back later", "Interested", "Visit booked"];
-const stages = ["New", "Contacted", "Qualified", "Visit booked", "Visited"];
-const closeReasons = ["bought", "bought_elsewhere", "price_too_high", "out_of_area", "just_browsing", "unreachable", "wrong_number", "invalid_number", "duplicate", "spam", "no_response"];
-const qualityFlags = ["", "good", "invalid_number", "wrong_person", "out_of_area", "budget_mismatch", "competitor", "spam", "duplicate"];
-const nowLabel = () => new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit" }).format(new Date());
+const deadReasons = ["not_interested", "bought_elsewhere", "price_too_high", "other"];
+const badReasons = ["spam", "wrong_number", "not_reachable", "fake_enquiry"];
 
-export function LeadDetail({ lead, user, initialTimeline, assignees }: { lead: LeadCard; user: SessionUser; initialTimeline: TimelineItem[]; assignees: Array<{ id: string; name: string }> }) {
-  const [sheet, setSheet] = useState<"disposition" | "note" | "visit" | "stage" | "close" | "assign" | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
-  const [stage, setStage] = useState(lead.stage);
-  const [attempts, setAttempts] = useState(lead.attempts);
-  const [owner, setOwner] = useState(lead.owner);
-  const baseTimeline = useMemo(() => initialTimeline, [initialTimeline]);
-  const [timeline, setTimeline] = useState<TimelineItem[]>(baseTimeline);
+function recordAttempt(leadId: string, channel: "call" | "whatsapp") {
+  const body = JSON.stringify({ leadId, channel });
+  if (navigator.sendBeacon) navigator.sendBeacon("/api/attempts", new Blob([body], { type: "application/json" }));
+  else void fetch("/api/attempts", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true });
+}
 
-  function flash(message: string) { setSaved(message); setSheet(null); window.setTimeout(() => setSaved(null), 3000); }
-  function warn(message: string) { setSaved(message); window.setTimeout(() => setSaved(null), 5000); }
-  function addTimeline(event: TimelineItem) {
-    const nextTimeline = [event, ...timeline];
-    setTimeline(nextTimeline);
-  }
+function words(value: string) { return value.replaceAll("_", " "); }
 
-  async function createAttempt(channel: "call" | "whatsapp") {
-    const body = { leadId: lead.id, channel };
-    try {
-      const response = await fetch("/api/attempts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      if (!response.ok) throw new Error();
-      const attempt = await response.json() as { id: string };
-      setActiveAttemptId(attempt.id);
-      return attempt.id;
-    } catch {
-      await queueOfflineMutation("/api/attempts", body);
-      return null;
-    }
-  }
+export function LeadDetail({ data, user }: { data: LeadDetailData; user: SessionUser }) {
+  const [sheet, setSheet] = useState<"note" | "followup" | "outcome" | "assign" | null>(null);
+  const [followupId, setFollowupId] = useState("");
+  const [outcome, setOutcome] = useState<"won" | "dead" | "bad">("won");
+  const [reason, setReason] = useState("");
+  const [gate, setGate] = useState<{ allowed: boolean; attempts: number; distinct_days: number; required_attempts: number; required_days: number } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const closed = ["won", "dead", "bad"].includes(data.lead.stage);
+  const readOnly = user.role === "agency";
 
-  async function beginCall() {
-    await createAttempt("call");
-    const nextAttempts = attempts + 1;
-    setAttempts(nextAttempts);
-    setSheet("disposition");
-    window.setTimeout(() => { window.location.href = `tel:${lead.phone.replace(/\s/g, "")}`; }, 160);
-  }
+  useEffect(() => {
+    if (sheet !== "outcome") return;
+    const query = new URLSearchParams({ outcome }); if (reason) query.set("reason", reason);
+    void fetch(`/api/leads/${data.lead.id}/close?${query}`, { cache: "no-store" }).then(async (response) => response.ok && setGate(await response.json()));
+  }, [data.lead.id, outcome, reason, sheet]);
 
-  async function beginWhatsApp() {
-    const target = window.open("about:blank", "_blank");
-    const id = await createAttempt("whatsapp");
-    if (id) await fetch(`/api/attempts/${id}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventType: "whatsapp_queued", payload: { origin: "lead_detail" } }) });
-    const nextAttempts = attempts + 1;
-    setAttempts(nextAttempts);
-    addTimeline({ at: nowLabel(), title: "WhatsApp opened", detail: "First response message prepared", tone: "calm" });
-    const message = encodeURIComponent(`Hi ${lead.name.split(" ")[0]}, this is ${user.name} from Roopkala. Thank you for your enquiry. How can I help you today?`);
-    const url = `https://wa.me/${lead.phone.replace(/\D/g, "")}?text=${message}`;
-    if (target) target.location.href = url;
-    else window.location.href = url;
-    flash("WhatsApp attempt recorded");
-  }
-
-  async function saveDisposition(disposition: string) {
-    if (activeAttemptId) await fetch(`/api/attempts/${activeAttemptId}/events`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ eventType: "disposition_logged", payload: { disposition: disposition.toLowerCase().replaceAll(" ", "_") } }) });
-    const connected = ["Connected", "Interested", "Visit booked"].includes(disposition);
-    const nextStage = connected && stage === "New" ? "Contacted" : stage;
-    if (nextStage !== stage) {
-      await fetch(`/api/leads/${lead.id}/stage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ stage: "contacted" }) });
-      setStage(nextStage);
-    }
-    addTimeline({ at: nowLabel(), title: `Call: ${disposition}`, detail: connected ? "Conversation recorded and lead moved forward" : "Attempt recorded; follow-up remains due", tone: connected ? "calm" : "neutral" });
-    flash(`Outcome saved: ${disposition}`);
-  }
-
-  async function saveNote(body: string) {
-    const payload = { body };
-    try { const response = await fetch(`/api/leads/${lead.id}/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); if (!response.ok) throw new Error(); }
-    catch { await queueOfflineMutation(`/api/leads/${lead.id}/notes`, payload); }
-    addTimeline({ at: nowLabel(), title: "Note added", detail: body, tone: "neutral" });
-    flash("Note added to the timeline");
-  }
-
-  async function saveVisit(form: HTMLFormElement) {
-    const data = new FormData(form);
-    const visitAt = new Date(`${data.get("date")}T${data.get("time")}:00`).toISOString();
-    const response = await fetch(`/api/leads/${lead.id}/stage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ stage: "visit_booked", visitAt }) });
-    if (!response.ok) return flash("Visit could not be saved");
-    setStage("Visit booked");
-    addTimeline({ at: nowLabel(), title: "Store visit booked", detail: new Date(visitAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }), tone: "calm" });
-    flash("Visit booked and added to the lead");
-  }
-
-  async function changeStage(next: string) {
-    const payload: Record<string, unknown> = { stage: next.toLowerCase().replaceAll(" ", "_") };
-    if (next === "Qualified") payload.requirementNote = "Qualified after confirming occasion, budget and visit preference.";
-    const response = await fetch(`/api/leads/${lead.id}/stage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    if (!response.ok) { const data = await response.json(); return flash(data.error ?? "Stage could not be updated"); }
-    setStage(next);
-    addTimeline({ at: nowLabel(), title: `Moved to ${next}`, detail: `Updated by ${user.name}`, tone: next === "Won" ? "calm" : "neutral" });
-    flash(`Lead moved to ${next}`);
-  }
-
-  async function closeLead(form: HTMLFormElement) {
-    const data = new FormData(form);
-    const closeReason = String(data.get("closeReason") ?? "");
-    const qualityFlag = String(data.get("qualityFlag") ?? "");
-    const orderValue = Number(data.get("orderValue") || 0) || undefined;
-    const linkedLeadId = String(data.get("linkedLeadId") ?? "") || undefined;
-    const response = await fetch(`/api/leads/${lead.id}/close`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ closeReason: closeReason || undefined, qualityFlag: qualityFlag || undefined, note: String(data.get("note") ?? ""), orderValue, linkedLeadId }) });
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    let endpoint = `/api/leads/${data.lead.id}/notes`;
+    let body: Record<string, unknown> = { body: values.get("note") };
+    if (sheet === "followup") { endpoint = `/api/followups/${followupId}`; body = { answer: values.get("answer"), note: values.get("note") }; }
+    if (sheet === "outcome") { endpoint = `/api/leads/${data.lead.id}/close`; body = { outcome, reason: reason || undefined, note: values.get("note") || undefined, orderValue: Number(values.get("orderValue")) || undefined }; }
+    if (sheet === "assign") { endpoint = `/api/leads/${data.lead.id}/assign`; body = { userId: values.get("userId"), reason: values.get("reason") }; }
+    const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json() as { error?: string };
-    if (!response.ok) return warn(result.error ?? "The lead cannot be closed yet");
-    const nextStage = closeReason === "bought" ? "Won" : "Lost";
-    setStage(nextStage);
-    addTimeline({ at: nowLabel(), title: `Lead closed · ${closeReason.replaceAll("_", " ") || qualityFlag.replaceAll("_", " ")}`, detail: `Closed by ${user.name}`, tone: closeReason === "bought" ? "calm" : "neutral" });
-    flash(`Lead marked ${nextStage}`);
+    if (!response.ok) return setMessage(result.error ?? "Could not save this change");
+    setSheet(null); setMessage("Saved. Refreshing the lead…"); window.setTimeout(() => window.location.reload(), 450);
   }
 
-  async function assignLead(form: HTMLFormElement) {
-    const data = new FormData(form); const userId = String(data.get("userId") ?? "");
-    const response = await fetch(`/api/leads/${lead.id}/assign`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, reason: String(data.get("reason") ?? "") }) });
-    const result = await response.json() as { error?: string };
-    if (!response.ok) return warn(result.error ?? "Lead could not be reassigned");
-    const name = assignees.find((item) => item.id === userId)?.name ?? "New owner";
-    setOwner(name); addTimeline({ at: nowLabel(), title: `Assigned to ${name}`, detail: `Reassigned by ${user.name}`, tone: "neutral" }); flash(`Assigned to ${name}`);
-  }
+  const phone = data.lead.phone.replace(/\D/g, "");
+  return <div className="lead-detail-page product-lead-detail">
+    <header className="lead-detail-head"><Link href={user.role === "salesperson" ? "/today" : "/leads"} aria-label="Back"><ArrowLeft /></Link><div><p>{data.lead.owner} · {words(data.lead.source)}</p><h1>{data.lead.name}</h1></div><span className={`stage-tag ${data.lead.stage}`}>{words(data.lead.stage)}</span></header>
+    <section className="lead-facts"><div><small>Phone</small><a href={`tel:${data.lead.phone}`}>{data.lead.phone}</a></div><div><small>Location</small><strong>{data.lead.city}</strong></div><div><small>Campaign</small><strong>{data.lead.campaign}</strong></div><div><small>First response</small><strong>{data.lead.firstResponseMinutes == null ? "Untouched" : `${data.lead.firstResponseMinutes} min`}</strong></div></section>
 
-  const backHref = user.role === "salesperson" ? "/today" : "/leads";
-  const progressStages = stage === "Won" || stage === "Lost" ? [...stages, stage] : stages;
-  return <div className="lead-detail-page functional-lead-detail">
-    <header className="lead-detail-head"><Link href={backHref} aria-label="Back"><ArrowLeft /></Link><div><p>{user.name} · {user.role === "salesperson" ? "Salesperson" : "Management"}</p><h1>{lead.name}</h1></div><span className={`detail-sla ${lead.state}`}>{lead.state === "breach" ? "+23:14" : lead.state === "warn" ? "01:06" : "On track"}</span></header>
-    <button className="stage-progress" onClick={() => setSheet("stage")} disabled={stage === "Won" || stage === "Lost"}><span><small>Current stage</small><strong>{stage}</strong></span><span>{progressStages.map((item) => <i className={progressStages.indexOf(item) <= progressStages.indexOf(stage) ? "done" : ""} key={item} />)}</span><ChevronDown size={18} /></button>
-    <section className="identity-card"><div><a className="phone-link" href={`tel:${lead.phone.replace(/\s/g, "")}`}>{lead.phone}</a><span><MapPin size={14} />{lead.city}</span></div><span className="international-chip">{lead.isInternational ? "International · 24 hr SLA" : `${owner} · Santacruz`}</span>{(["manager", "owner", "admin"] as string[]).includes(user.role) && <button className="reassign-link" onClick={() => setSheet("assign")}>Reassign</button>}</section>
-    <section className="creative-card"><div className="creative-placeholder"><ImageOff size={22} /><small>Creative preview pending source connection</small></div><div><small>Enquired from</small><h2>{lead.ad}</h2><p>{lead.campaign}</p></div></section>
-    {lead.customFields && Object.keys(lead.customFields).filter((key) => !key.startsWith("_")).length > 0 && <section className="form-answers"><h2>What they asked for</h2><dl>{Object.entries(lead.customFields).filter(([key]) => !key.startsWith("_")).slice(0, 6).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{String(value)}</dd></div>)}</dl></section>}
-    <section className="timeline"><div className="timeline-title"><h2>Activity</h2><span>{attempts} attempt{attempts === 1 ? "" : "s"}</span></div>{timeline.map((event, index) => <div className={`timeline-event ${event.tone} ${event.corrected ? "corrected" : ""}`} key={event.id ?? `${event.at}-${event.title}-${index}`}><span /><time>{event.at}</time><div><strong>{event.title}{event.corrected ? " · corrected" : ""}</strong><small>{event.detail}</small>{event.clientAt && <small>{event.clientAt}</small>}</div></div>)}</section>
-    <div className="lead-actions"><button onClick={() => void beginCall()}><PhoneCall />Call</button><button onClick={() => void beginWhatsApp()}><MessageCircle />WhatsApp</button><button onClick={() => setSheet("note")}><NotebookPen />Note</button><button onClick={() => setSheet("visit")}><CalendarPlus />Book visit</button><button onClick={() => setSheet("close")}><CircleX />Close</button></div>
-    {saved && <div className="saved-toast"><Check size={17} />{saved}</div>}
-    {sheet && <div className="sheet-backdrop" onClick={() => setSheet(null)}><section className="action-sheet" onClick={(event) => event.stopPropagation()}><header><div><small>{lead.name}</small><h2>{sheet === "disposition" ? "What happened on the call?" : sheet === "note" ? "Add a note" : sheet === "visit" ? "Book a store visit" : sheet === "close" ? "Close or flag this lead" : sheet === "assign" ? "Assign this lead" : "Update lead stage"}</h2></div><button onClick={() => setSheet(null)} aria-label="Close"><X /></button></header>
-      {sheet === "disposition" && <div className="disposition-grid">{dispositions.map((item) => <button key={item} onClick={() => void saveDisposition(item)}>{item}</button>)}</div>}
-      {sheet === "note" && <form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void saveNote(String(data.get("body") ?? "")); }}><textarea name="body" minLength={1} required placeholder="What did the lead say? What should happen next?" /><button className="primary-form-button">Save note</button></form>}
-      {sheet === "visit" && <form onSubmit={(event) => { event.preventDefault(); void saveVisit(event.currentTarget); }}><label>Date<input name="date" type="date" required /></label><label>Time<input name="time" type="time" required /></label><button className="primary-form-button">Book visit</button></form>}
-      {sheet === "stage" && <div className="stage-options">{stages.map((item) => <button className={item === stage ? "selected" : ""} disabled={item === stage} onClick={() => void changeStage(item)} key={item}><span>{item}</span>{item === stage && <Check size={17} />}</button>)}</div>}
-      {sheet === "close" && <form onSubmit={(event) => { event.preventDefault(); void closeLead(event.currentTarget); }}><label>Close reason<select name="closeReason" defaultValue=""><option value="">Select a reason</option>{closeReasons.map((reason) => <option key={reason} value={reason}>{reason.replaceAll("_", " ")}</option>)}</select></label><label>Quality flag (optional)<select name="qualityFlag" defaultValue="">{qualityFlags.map((flag) => <option key={flag || "none"} value={flag}>{flag ? flag.replaceAll("_", " ") : "No additional flag"}</option>)}</select></label><label>Evidence note<textarea name="note" placeholder="Conversation outcome or evidence for this decision" /></label><label>Order value, if bought<input name="orderValue" type="number" min="1" step="1" /></label><label>Original lead ID, if duplicate<input name="linkedLeadId" /></label><button className="primary-form-button">Check evidence and close</button></form>}
-      {sheet === "assign" && <form onSubmit={(event) => { event.preventDefault(); void assignLead(event.currentTarget); }}><label>Salesperson<select name="userId" required defaultValue=""><option value="" disabled>Choose a salesperson</option>{assignees.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label>Reason<textarea name="reason" minLength={5} required placeholder="Why is this lead being reassigned?" /></label><button className="primary-form-button">Assign lead</button></form>}
-    </section></div>}
+    {!readOnly && !closed && <section className="primary-contact-bar"><a href={`tel:${data.lead.phone}`} onClick={() => recordAttempt(data.lead.id, "call")}><PhoneCall />Call</a><a href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer" onClick={() => recordAttempt(data.lead.id, "whatsapp")}><MessageCircle />WhatsApp</a><button onClick={() => setSheet("note")}><NotebookPen />Note</button></section>}
+
+    <section className="followup-card"><header><div><h2>Four-day follow-up</h2><p>Every Yes needs a Call or WhatsApp attempt today.</p></div><span>{data.followups.filter((item) => item.status === "done").length}/{data.followups.length}</span></header>{data.followups.length ? data.followups.map((item) => <div className={`followup-line ${item.status}`} key={item.id}><span>Day {item.dayNumber}</span><small>{item.dueDate}</small><strong>{item.status}{item.answer ? ` · ${item.answer}` : ""}</strong>{!readOnly && !closed && ["pending", "missed"].includes(item.status) ? <button onClick={() => { setFollowupId(item.id); setSheet("followup"); }}>Complete <ChevronRight size={15} /></button> : <em>{item.note ?? "—"}</em>}</div>) : <p className="queue-empty">Follow-ups begin after the first Call or WhatsApp tap.</p>}</section>
+
+    {!readOnly && <section className="lead-management"><button disabled={closed} onClick={() => setSheet("outcome")}><Check />Record outcome</button>{user.role === "owner" && <button disabled={closed} onClick={() => setSheet("assign")}><UserRoundCog />Reassign</button>}<button onClick={() => window.location.reload()}><RefreshCw />Refresh</button></section>}
+
+    <section className="timeline"><div className="timeline-title"><h2>Complete timeline</h2><span>{data.lead.attempts} attempts</span></div>{data.timeline.map((event) => <div className={`timeline-event ${event.tone}`} key={event.id}><span /><time>{event.at}</time><div><strong>{event.title}</strong><small>{event.detail}</small></div></div>)}</section>
+
+    {message && <button className="saved-toast" onClick={() => setMessage(null)}><Check size={16} />{message}</button>}
+    {sheet && <div className="sheet-backdrop" onClick={() => setSheet(null)}><form className="action-sheet" onSubmit={submit} onClick={(event) => event.stopPropagation()}><header><div><small>{data.lead.name}</small><h2>{sheet === "note" ? "Add note" : sheet === "followup" ? "Complete follow-up" : sheet === "assign" ? "Reassign lead" : "Record final outcome"}</h2></div><button type="button" onClick={() => setSheet(null)}><X /></button></header>
+      {sheet === "note" && <label>Note<textarea name="note" required placeholder="What happened and what should happen next?" /></label>}
+      {sheet === "followup" && <><label>Did you speak with the lead?<select name="answer" required defaultValue=""><option value="" disabled>Select</option><option value="yes">Yes</option><option value="no">No</option></select></label><label>Note (minimum 10 characters)<textarea name="note" minLength={10} required /></label></>}
+      {sheet === "assign" && <><label>Assign to<select name="userId" required defaultValue=""><option value="" disabled>Select</option>{data.assignees.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Reason<textarea name="reason" minLength={5} required /></label></>}
+      {sheet === "outcome" && <><div className="outcome-tabs">{(["won", "dead", "bad"] as const).map((item) => <button type="button" className={outcome === item ? "active" : ""} onClick={() => { setOutcome(item); setReason(""); }} key={item}>{item}</button>)}</div>{outcome !== "won" && <label>Reason<select value={reason} onChange={(event) => setReason(event.target.value)} required><option value="" disabled>Select</option>{(outcome === "dead" ? deadReasons : badReasons).map((item) => <option key={item} value={item}>{words(item)}</option>)}</select></label>}{outcome === "won" && <label>Order value<input name="orderValue" type="number" min="1" required /></label>}{outcome === "dead" && reason === "other" && <label>Note<textarea name="note" required /></label>}{gate && <div className={gate.allowed ? "gate-ready gate-status" : "gate-failed gate-status"}>{gate.required_attempts > 0 ? `${gate.attempts} of ${gate.required_attempts} attempts, ${gate.distinct_days} of ${gate.required_days} days${gate.allowed ? " · ready" : ""}` : "No additional evidence gate for this outcome"}</div>}</>}
+      <button className="primary-form-button">Save</button>
+    </form></div>}
     <MobileBottomNav active="/leads" user={user} />
   </div>;
 }

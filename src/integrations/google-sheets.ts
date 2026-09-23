@@ -12,6 +12,7 @@ export const googleSheetMappingSchema = z.object({
   city: z.string().trim().default("city"),
   campaignName: z.string().trim().default("campaign"),
   adName: z.string().trim().default("ad"),
+  metaLeadId: z.string().trim().default("meta_lead_id"),
 });
 
 export const googleSheetConnectionInputSchema = z.object({
@@ -19,6 +20,7 @@ export const googleSheetConnectionInputSchema = z.object({
   sheetName: z.string().trim().min(1).max(200),
   headerRow: z.coerce.number().int().min(1).max(100).default(1),
   enabled: z.boolean().default(false),
+  importAfter: z.string().datetime().optional(),
   mapping: googleSheetMappingSchema,
 });
 
@@ -102,16 +104,21 @@ async function accessToken(signal?: AbortSignal): Promise<string> {
   return cachedToken.value;
 }
 
-export async function readGoogleSheet(args: { spreadsheetId: string; sheetName: string; headerRow: number; signal?: AbortSignal }) {
+export async function readGoogleSheet(args: { spreadsheetId: string; sheetName: string; headerRow: number; startRow?: number; signal?: AbortSignal }) {
   const token = await accessToken(args.signal);
   const escapedName = args.sheetName.replace(/'/g, "''");
-  const range = `'${escapedName}'!${args.headerRow}:5000`;
-  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(args.spreadsheetId)}/values/${encodeURIComponent(range)}`);
+  const dataStart = Math.max(args.startRow ?? args.headerRow + 1, args.headerRow + 1);
+  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(args.spreadsheetId)}/values:batchGet`);
+  url.searchParams.append("ranges", `'${escapedName}'!${args.headerRow}:${args.headerRow}`);
+  url.searchParams.append("ranges", `'${escapedName}'!${dataStart}:ZZZ`);
   url.searchParams.set("majorDimension", "ROWS");
   url.searchParams.set("valueRenderOption", "FORMATTED_VALUE");
   url.searchParams.set("dateTimeRenderOption", "FORMATTED_STRING");
   const response = await fetch(url, { signal: args.signal, headers: { authorization: `Bearer ${token}` } });
-  const body = await response.json() as { values?: unknown[][]; error?: { message?: string } };
+  const body = await response.json() as { valueRanges?: Array<{ values?: unknown[][] }>; error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message ?? "Google Sheets could not be read");
-  return rowsFromValues(body.values ?? [], 1);
+  const header = body.valueRanges?.[0]?.values?.[0] ?? [];
+  const values = body.valueRanges?.[1]?.values ?? [];
+  const parsed = rowsFromValues([header, ...values], 1);
+  return { headers: parsed.headers, rows: parsed.rows.map((row) => ({ ...row, rowNumber: dataStart + row.rowNumber - 2 })) };
 }

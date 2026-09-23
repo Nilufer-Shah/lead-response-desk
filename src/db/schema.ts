@@ -19,14 +19,16 @@ import {
 
 export const app = pgSchema("app");
 
-export const userRole = app.enum("user_role", ["salesperson", "manager", "owner", "agency", "admin"]);
+export const userRole = app.enum("user_role", ["owner", "salesperson", "agency"]);
 export const userStatus = app.enum("user_status", ["invited", "active", "disabled"]);
 export const leadSource = app.enum("lead_source", [
   "meta_lead_form", "csv_import", "whatsapp", "instagram_dm", "instagram_comment",
   "instagram_story_reply", "website_form", "website_whatsapp", "walk_in",
   "phone_inbound", "referral", "other",
 ]);
-export const leadStage = app.enum("lead_stage", ["new", "contacted", "qualified", "visit_booked", "visited", "won", "lost"]);
+export const leadStage = app.enum("lead_stage", ["new", "contacted", "follow_up", "dormant", "won", "dead", "bad"]);
+export const followupStatus = app.enum("followup_status", ["pending", "done", "missed", "cancelled"]);
+export const followupAnswer = app.enum("followup_answer", ["yes", "no"]);
 export const conversationState = app.enum("conversation_state", ["waiting_on_us", "waiting_on_lead", "scheduled", "closed"]);
 export const qualityFlag = app.enum("quality_flag", ["unrated", "good", "invalid_number", "wrong_person", "out_of_area", "budget_mismatch", "competitor", "spam", "duplicate"]);
 export const closeReason = app.enum("close_reason", ["bought", "bought_elsewhere", "price_too_high", "out_of_area", "just_browsing", "unreachable", "wrong_number", "invalid_number", "duplicate", "spam", "no_response"]);
@@ -55,7 +57,7 @@ export const tenants = app.table("tenants", {
   accentColor: text("accent_color").default("#7B5EA7").notNull(),
   timezone: text("timezone").default("Asia/Kolkata").notNull(),
   currency: text("currency").default("INR").notNull(),
-  active: boolean("active").default(true).notNull(),
+  active: boolean("active").default(true).notNull(), followupDays: integer("followup_days").default(4).notNull(),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [uniqueIndex("tenants_slug_uq").on(table.slug)]);
 
@@ -70,7 +72,9 @@ export const users = app.table("users", {
   id: id(), tenantId: tenantId(), displayName: text("display_name").notNull(),
   phoneE164: text("phone_e164"), email: text("email"), role: userRole("role").notNull(),
   status: userStatus("status").default("invited").notNull(), storeId: uuid("store_id"),
-  available: boolean("available").default(true).notNull(), shiftStartsAt: time("shift_starts_at"), shiftEndsAt: time("shift_ends_at"),
+  available: boolean("available").default(true).notNull(), passwordHash: text("password_hash"),
+  passwordResetRequired: boolean("password_reset_required").default(false).notNull(),
+  shiftStartsAt: time("shift_starts_at"), shiftEndsAt: time("shift_ends_at"),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [
   uniqueIndex("users_phone_uq").on(table.tenantId, table.phoneE164),
@@ -125,8 +129,10 @@ export const googleSheetConnections = app.table("google_sheet_connections", {
   spreadsheetId: text("spreadsheet_id").notNull(), sheetName: text("sheet_name").notNull(),
   headerRow: integer("header_row").default(1).notNull(), mapping: jsonb("mapping").default({}).notNull(),
   enabled: boolean("enabled").default(false).notNull(), createdBy: uuid("created_by").notNull(),
+  importAfter: timestamp("import_after", { withTimezone: true }).defaultNow().notNull(),
+  lastSyncedRow: integer("last_synced_row").default(0).notNull(), lastFullCheckAt: timestamp("last_full_check_at", { withTimezone: true }),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }), lastHealthyAt: timestamp("last_healthy_at", { withTimezone: true }),
-  lastError: text("last_error"), createdAt: createdAt(), updatedAt: updatedAt(),
+  lastError: text("last_error"), lastSkippedRows: integer("last_skipped_rows").default(0).notNull(), createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [
   uniqueIndex("google_sheet_connection_source_uq").on(table.tenantId, table.sourceConnectionId),
   uniqueIndex("google_sheet_connection_sheet_uq").on(table.tenantId, table.spreadsheetId, table.sheetName),
@@ -137,7 +143,8 @@ export const googleSheetSyncRuns = app.table("google_sheet_sync_runs", {
   id: id(), tenantId: tenantId(), googleSheetConnectionId: uuid("google_sheet_connection_id").notNull(),
   status: text("status").notNull(), rowsSeen: integer("rows_seen").default(0).notNull(),
   insertedRows: integer("inserted_rows").default(0).notNull(), repeatRows: integer("repeat_rows").default(0).notNull(),
-  rejectedRows: integer("rejected_rows").default(0).notNull(), error: text("error"),
+  rejectedRows: integer("rejected_rows").default(0).notNull(), skippedRows: integer("skipped_rows").default(0).notNull(),
+  unchangedRows: integer("unchanged_rows").default(0).notNull(), error: text("error"),
   startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }), createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [index("google_sheet_sync_runs_lookup_idx").on(table.tenantId, table.googleSheetConnectionId, table.startedAt)]);
@@ -174,22 +181,24 @@ export const leads = app.table("leads", {
   formId: text("form_id"), formName: text("form_name"), campaignId: text("campaign_id"), campaignName: text("campaign_name"),
   adsetId: text("adset_id"), adsetName: text("adset_name"), adId: text("ad_id"), adName: text("ad_name"), creativeThumb: text("creative_thumb"),
   fullName: text("full_name"), fullNameRaw: text("full_name_raw"), phoneE164: text("phone_e164"), phoneRaw: text("phone_raw"),
-  email: text("email"), city: text("city"), isInternational: boolean("is_international").default(false).notNull(),
+  email: text("email"), city: text("city"), metaLeadId: text("meta_lead_id"), isInternational: boolean("is_international").default(false).notNull(),
   customFields: jsonb("custom_fields").default({}).notNull(), stage: leadStage("stage").default("new").notNull(),
   conversationState: conversationState("conversation_state").default("waiting_on_us").notNull(), assignedTo: uuid("assigned_to"), storeId: uuid("store_id"),
   enquiryCount: integer("enquiry_count").default(1).notNull(), leadCreatedAt: timestamp("lead_created_at", { withTimezone: true }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(), assignedAt: timestamp("assigned_at", { withTimezone: true }),
   firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }), firstTouchAt: timestamp("first_touch_at", { withTimezone: true }),
+  firstContactedAt: timestamp("first_contacted_at", { withTimezone: true }), firstResponseMinutes: integer("first_response_minutes"),
   firstConnectAt: timestamp("first_connect_at", { withTimezone: true }), slaPolicyVersionId: uuid("sla_policy_version_id").notNull(),
   slaDueAt: timestamp("sla_due_at", { withTimezone: true }).notNull(), slaBreached: boolean("sla_breached").default(false).notNull(),
   slaBreachMinutes: integer("sla_breach_minutes"), attemptCount: integer("attempt_count").default(0).notNull(),
   lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }), nextActionAt: timestamp("next_action_at", { withTimezone: true }),
-  closedAt: timestamp("closed_at", { withTimezone: true }), closeReason: closeReason("close_reason"),
+  closedAt: timestamp("closed_at", { withTimezone: true }), closedBy: uuid("closed_by"), outcomeReason: text("outcome_reason"), closeReason: closeReason("close_reason"),
   qualityFlag: qualityFlag("quality_flag").default("unrated").notNull(), orderValue: numeric("order_value", { precision: 12, scale: 2 }),
   hydrationFailed: boolean("hydration_failed").default(false).notNull(), sourceRecovery: boolean("source_recovery").default(false).notNull(),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [
   uniqueIndex("leads_external_uq").on(table.tenantId, table.source, table.externalId),
+  uniqueIndex("leads_meta_lead_id_uq").on(table.tenantId, table.metaLeadId),
   index("leads_phone_idx").on(table.tenantId, table.phoneE164),
   index("leads_today_idx").on(table.tenantId, table.assignedTo, table.conversationState, table.nextActionAt),
   index("leads_untouched_idx").on(table.tenantId, table.firstTouchAt, table.slaDueAt),
@@ -228,6 +237,16 @@ export const notes = app.table("notes", {
   clientInitiatedAt: timestamp("client_initiated_at", { withTimezone: true }), device: text("device"), ip: inet("ip"),
   createdAt: createdAt(), updatedAt: updatedAt(),
 }, (table) => [index("notes_lead_idx").on(table.tenantId, table.leadId, table.createdAt)]);
+
+export const leadFollowups = app.table("lead_followups", {
+  id: id(), tenantId: tenantId(), leadId: uuid("lead_id").notNull(), dayNumber: integer("day_number").notNull(),
+  dueDate: date("due_date").notNull(), status: followupStatus("status").default("pending").notNull(),
+  answer: followupAnswer("answer"), note: text("note"), attemptId: uuid("attempt_id"),
+  answeredAt: timestamp("answered_at", { withTimezone: true }), answeredBy: uuid("answered_by"),
+  createdAt: createdAt(), updatedAt: updatedAt(),
+}, (table) => [
+  index("lead_followups_due_idx").on(table.tenantId, table.status, table.dueDate),
+]);
 
 export const webhookEvents = app.table("webhook_events", {
   id: id(), tenantId: tenantId(), source: leadSource("source").notNull(), headers: jsonb("headers").default({}).notNull(),

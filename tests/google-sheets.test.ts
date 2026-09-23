@@ -24,4 +24,12 @@ describe("Google Sheets intake", () => {
   it("parses Indian day-first timestamps in IST", () => {
     expect(parseSheetDate("13/09/2026 20:15", new Date(0)).toISOString()).toBe("2026-09-13T14:45:00.000Z");
   });
+
+  it("maps at least 10,000 lead rows without truncation", () => {
+    const values: unknown[][] = [["name", "phone", "created_at"]];
+    for (let index = 0; index < 10_000; index += 1) values.push([`Lead ${index}`, `98765${String(index).padStart(5, "0")}`, "13/09/2026 20:15"]);
+    const result = rowsFromValues(values, 1);
+    expect(result.rows).toHaveLength(10_000);
+    expect(result.rows.at(-1)?.rowNumber).toBe(10_001);
+  });
 });

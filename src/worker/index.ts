@@ -2,7 +2,8 @@ import { PgBoss } from "pg-boss";
 import { env } from "@/lib/env";
 import { snapshotDailyMetrics } from "@/services/daily-metrics";
 import { runIntegrityAudit } from "@/services/integrity";
-import { processDueFollowups, processSlaEscalations } from "@/services/escalations";
+import { processSlaEscalations } from "@/services/escalations";
+import { processFollowupCadence } from "@/services/followups";
 import { queueDailyOwnerDigest } from "@/services/digest";
 import { generateWeeklyPdf } from "@/services/weekly-report";
 import { deliverQueuedNotifications } from "@/services/notification-delivery";
@@ -31,8 +32,8 @@ async function main() {
   });
   await boss.work<TenantJob>("followup.due", async (jobs) => {
     for (const job of jobs) {
-      const due = await processDueFollowups(job.data.tenantId);
-      process.stdout.write(`Follow-up due ${job.data.tenantId}: ${due} leads\n`);
+      const result = await processFollowupCadence(job.data.tenantId);
+      process.stdout.write(`Follow-up cadence ${job.data.tenantId}: ${result.due} due, ${result.missed} missed, ${result.dormant} dormant\n`);
     }
   });
   await boss.work<TenantJob>("notification.send", async (jobs) => {
