@@ -29,7 +29,7 @@ npm run dev:worker
 
 ## Production deployment with Docker Compose and Caddy
 
-1. Point an approved domain at the VPS. Do not buy or change a domain without approval.
+1. Point an approved domain at the client's VPS. Do not buy or change a domain without approval.
 2. Copy `.env.example` to `.env`; set `NODE_ENV=production`, `APP_DOMAIN`, matching HTTPS `APP_URL`, unique database passwords, a random 32+ character `SESSION_SECRET`, and the bootstrap owner credentials.
 3. Keep `META_CONNECTION_ENABLED=false` until the Meta checklist below is complete.
 4. Allow inbound TCP 80 and 443. Do not expose PostgreSQL publicly.
@@ -47,12 +47,12 @@ Caddy obtains TLS certificates and proxies to `web:3000`. Migrations use the dat
 
 ## Deploying onto a VPS that already runs other apps
 
-Use this layout when the VPS already has a CRM or another application behind nginx, Caddy, Traefik, or a similar reverse proxy. Ports 80 and 443 are probably already owned by that proxy, so do not start the bundled Lead Response Desk Caddy service and do not bind this app directly to a public interface.
+Use this layout when the client's VPS already has a CRM or another application behind nginx, Caddy, Traefik, or a similar reverse proxy. Ports 80 and 443 are probably already owned by that proxy, so do not start the bundled Lead Response Desk Caddy service and do not bind this app directly to a public interface.
 
-`compose.existing-proxy.yaml` keeps Lead Response Desk in its own Compose project, starts its own PostgreSQL container, migrations, web process, and worker, and binds the web container only to the VPS loopback interface. The default host port is `3010`; change `LRD_WEB_PORT` only after checking which ports are free.
+`compose.existing-proxy.yaml` keeps Lead Response Desk in its own Compose project, starts its own PostgreSQL container, migrations, web process, and worker, and binds the web container only to the client's VPS loopback interface. The default host port is `3010`; change `LRD_WEB_PORT` only after checking which ports are free.
 
 ```sh
-# From the Lead Response Desk repository on the VPS:
+# From the Lead Response Desk repository on the client's VPS:
 ss -ltnp
 cp .env.example .env
 # Fill .env with production values. Set APP_URL to the final HTTPS subdomain.
@@ -98,11 +98,11 @@ server {
 }
 ```
 
-Test with `nginx -t` before reloading nginx. If Certbot manages this server, obtain the certificate for the new subdomain using the VPS team's existing process.
+Test with `nginx -t` before reloading nginx. If Certbot manages this server, obtain the certificate for the new subdomain using the existing process on the client's VPS.
 
 ### Caddy site block
 
-Caddy obtains and renews HTTPS automatically when the domain points to the VPS and ports 80/443 reach Caddy.
+Caddy obtains and renews HTTPS automatically when the domain points to the client's VPS and ports 80/443 reach Caddy.
 
 ```caddyfile
 leads.example.com {
