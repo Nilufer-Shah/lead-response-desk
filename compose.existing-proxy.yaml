@@ -1,0 +1,8 @@
+services:
+  web:
+    ports:
+      - "127.0.0.1:${LRD_WEB_PORT:-3010}:3000"
+
+  caddy:
+    profiles:
+      - bundled-proxy

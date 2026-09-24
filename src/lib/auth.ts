@@ -10,7 +10,6 @@ const secret = () => new TextEncoder().encode(env().SESSION_SECRET);
 export interface SessionUser { id: string; tenantId: string; name: string; role: "owner" | "salesperson" | "agency" }
 
 export function hashSecret(value: string): string { return createHash("sha256").update(value).digest("hex"); }
-export function newOtp(): string { return String(Math.floor(100000 + Math.random() * 900000)); }
 export function newOpaqueToken(): string { return randomBytes(32).toString("base64url"); }
 export function safeEqual(left: string, right: string): boolean {
   const a = Buffer.from(left); const b = Buffer.from(right);

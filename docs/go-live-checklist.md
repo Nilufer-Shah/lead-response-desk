@@ -9,6 +9,8 @@
 - [ ] The active Sheet is shared as Viewer and Owner has tested URL, tab, header, cutoff and mappings.
 - [ ] `GOOGLE_SHEETS_ENABLED=true`; keep `META_CONNECTION_ENABLED=false` until its separate checklist is complete.
 - [ ] Owner, salesperson and agency email/password access is tested.
+- [ ] The deployment method is chosen: standalone Caddy stack or `compose.existing-proxy.yaml` behind the VPS's existing proxy.
+- [ ] If sharing a VPS, the loopback web port is free and the CRM's containers, database, network, volumes and existing proxy site remain untouched.
 
 ## Deploy and verify
 
@@ -21,9 +23,10 @@ curl -fsS https://YOUR_APPROVED_DOMAIN/api/health
 ```
 
 - [ ] PostgreSQL, web, worker and Caddy are healthy and restart automatically.
-- [ ] Owner creates two salespeople; a new Sheet row alternates assignment.
+- [ ] With the client's current single active salesperson, a controlled incoming lead is assigned to that user.
 - [ ] Historic Sheet rows before the cutoff are skipped.
-- [ ] Salesperson tests Call, WhatsApp, quick note, follow-up and outcome flows on a phone.
+- [x] Call and WhatsApp links were tested on real phones; links opened and attempts were recorded.
+- [ ] Salesperson tests navigation, quick note, follow-up and outcome flows on the exact production phone/browser combination.
 - [ ] “Yes” without a same-day contact tap is blocked.
 - [ ] Gated Dead/Bad outcomes are blocked until two attempts on two days.
 - [ ] Won cancels pending follow-ups.
@@ -31,6 +34,8 @@ curl -fsS https://YOUR_APPROVED_DOMAIN/api/health
 - [ ] Salesperson cannot see another salesperson’s leads; Agency cannot modify data.
 - [ ] Today, 7-day and 30-day dashboard values match the controlled test dataset.
 - [ ] `owner:reset-password` is tested, then its one-time environment value is removed.
+- [ ] If CRM-supplied assignment is later enabled, an invalid or cross-tenant assignee is rejected and round-robin remains the fallback.
+- [ ] Off-host backup and restore are tested without accessing the CRM database.
 
 ## Meta activation (later)
 

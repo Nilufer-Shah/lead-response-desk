@@ -588,6 +588,7 @@ tbody tr:hover td { background: #fffbfd; }
 .sidebar-foot form button { display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 8px; color: #8b7e8d; background: transparent; cursor: pointer; }
 .sidebar-foot form button:hover { color: #a91d73; background: #faedf5; }
 .owner-intro { margin: -15px 0 20px; }
+.live-strip-caption { margin: -8px 0 16px; color: var(--text-faint); font-size: 10px; }
 
 .metric-links > a { min-width: 0; padding: 17px 16px 15px; color: inherit; border-right: 1px solid var(--ink-line); text-decoration: none; transition: transform .16s ease, box-shadow .16s ease; }
 .metric-links > a:last-child { border-right: 0; }

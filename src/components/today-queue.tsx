@@ -98,7 +98,7 @@ export function TodayQueue({ user, initialData }: { user: SessionUser; initialDa
     <section className="queue-section"><header><div><h2>Due today</h2><p>Complete after the conversation</p></div><b>{data.dueFollowups.length}</b></header>
       {data.dueFollowups.length ? data.dueFollowups.map((lead) => <LeadRow key={lead.followupId} lead={lead} type="due" onFollowup={(item) => setDialog({ kind: "followup", lead: item })} onNote={(item) => setDialog({ kind: "note", lead: item })} />) : <p className="queue-empty">No follow-ups due today.</p>}
     </section>
-    <section className="queue-section missed"><header><div><h2>Missed</h2><p>Still needs an answer</p></div><b>{data.missedFollowups.length}</b></header>
+    <section className="queue-section missed"><header><div><h2>Missed follow-ups</h2><p>Still needs an answer</p></div><b>{data.missedFollowups.length}</b></header>
       {data.missedFollowups.length ? data.missedFollowups.map((lead) => <LeadRow key={lead.followupId} lead={lead} type="missed" onFollowup={(item) => setDialog({ kind: "followup", lead: item })} onNote={(item) => setDialog({ kind: "note", lead: item })} />) : <p className="queue-empty">No missed follow-ups.</p>}
     </section>
     {message && <button className="saved-toast" onClick={() => setMessage(null)}><Check size={16} />{message}</button>}

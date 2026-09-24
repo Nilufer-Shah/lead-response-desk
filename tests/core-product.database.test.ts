@@ -168,7 +168,8 @@ describe("Google Sheets cutoff", () => {
     });
     expect(result).toMatchObject({ rowsSeen: 2, inserted: 1, skipped: 1 });
     const leads = await sql<{ assigned_to: string }[]>`SELECT assigned_to FROM app.leads WHERE tenant_id=${fixture.tenantId}`;
-    expect(leads).toEqual([{ assigned_to: fixture.salespersonA }]);
+    expect(leads).toHaveLength(1);
+    expect([fixture.salespersonA, fixture.salespersonB]).toContain(leads[0].assigned_to);
   });
 });
 

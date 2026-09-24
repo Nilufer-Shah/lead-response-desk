@@ -33,7 +33,7 @@ describe("production application contract", () => {
     expect(schema).toContain('["new", "contacted", "follow_up", "dormant", "won", "dead", "bad"]');
   });
 
-  it("uses password hashes and has no OTP sign-in endpoints", () => {
+  it("uses password hashes and password-only sign-in endpoints", () => {
     expect(read("src/app/api/auth/login/route.ts")).toContain('from "bcryptjs"');
     expect(read("src/lib/auth.ts")).toContain("sessionId");
   });
@@ -48,5 +48,24 @@ describe("production application contract", () => {
       expect(source).not.toMatch(/await\s+recordAttempt/);
     }
     expect(read("src/components/today-queue.tsx")).toContain("Quick note");
+  });
+
+  it("keeps missed follow-ups visible and makes dashboard periods unambiguous", () => {
+    const queue = read("src/components/today-queue.tsx");
+    expect(queue).toContain("Missed follow-ups");
+    expect(queue).toContain("data.missedFollowups.map");
+    const dashboard = read("src/components/product-dashboard.tsx");
+    expect(dashboard).toContain("Waiting right now (all dates)");
+    expect(dashboard).toContain("Live, regardless of date filter.");
+    expect(dashboard).toContain("New leads ({periodLabel})");
+  });
+
+  it("keeps development and persistent actions clear of mobile navigation", () => {
+    expect(read("next.config.ts")).toContain("devIndicators: false");
+    const styles = read("src/app/globals.css");
+    expect(styles).toContain(".main-stage { padding: 0 14px 98px; }");
+    expect(styles).toContain(".mobile-bottom-nav { position: fixed; z-index: 50;");
+    expect(styles).toContain(".call-next, .lead-actions { bottom: calc(68px + env(safe-area-inset-bottom)); }");
+    expect(styles).toContain(".saved-toast { position: fixed; z-index: 40; left: 50%; bottom: 92px;");
   });
 });

@@ -180,7 +180,7 @@ export const leads = app.table("leads", {
   formId: text("form_id"), formName: text("form_name"), campaignId: text("campaign_id"), campaignName: text("campaign_name"),
   adsetId: text("adset_id"), adsetName: text("adset_name"), adId: text("ad_id"), adName: text("ad_name"), creativeThumb: text("creative_thumb"),
   fullName: text("full_name"), fullNameRaw: text("full_name_raw"), phoneE164: text("phone_e164"), phoneRaw: text("phone_raw"),
-  email: text("email"), city: text("city"), metaLeadId: text("meta_lead_id"), isInternational: boolean("is_international").default(false).notNull(),
+  email: text("email"), city: text("city"), metaLeadId: text("meta_lead_id"),
   customFields: jsonb("custom_fields").default({}).notNull(), stage: leadStage("stage").default("new").notNull(),
   conversationState: conversationState("conversation_state").default("waiting_on_us").notNull(), assignedTo: uuid("assigned_to"), storeId: uuid("store_id"),
   enquiryCount: integer("enquiry_count").default(1).notNull(), leadCreatedAt: timestamp("lead_created_at", { withTimezone: true }).notNull(),
