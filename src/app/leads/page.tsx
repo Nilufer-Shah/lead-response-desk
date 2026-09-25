@@ -9,7 +9,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   if (!user) redirect("/login");
   const query = await searchParams;
   const leads = await getLeadList(user);
-  return <DesktopShell active="/leads" title={user.role === "salesperson" ? "My leads" : "All leads"} eyebrow={user.role === "salesperson" ? `${user.name} · active queue` : `${leads.length} visible leads`}>
+  return <DesktopShell active="/leads" title={user.role === "salesperson" ? "My leads" : "All leads"} eyebrow={user.role === "salesperson" ? `${user.name} · active queue` : "Owner · live lead register"}>
     <LeadInbox user={user} initialLeads={leads} initialView={query.view} />
   </DesktopShell>;
 }

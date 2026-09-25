@@ -26,5 +26,5 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className={inter.variable}>{children}</body></html>;
+  return <html lang="en"><body className={inter.variable} suppressHydrationWarning>{children}</body></html>;
 }
