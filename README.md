@@ -27,6 +27,19 @@ npm run dev
 npm run dev:worker
 ```
 
+## What is already built, and what the agency activates after deployment
+
+The production users, Google Sheet intake, and Meta Lead Ads connection are **already implemented in this repository**. They are not unfinished product features. They are deliberately shipped without the client's live credentials because passwords, private keys, access tokens, Sheet IDs, Page IDs, and form IDs must never be committed to Git.
+
+After the app is deployed, the agency will request temporary access from the client and complete the activation on the client's VPS and accounts:
+
+1. Create the client's real Owner, Salesperson, and optional Agency users, then give each person their own temporary password to change at first sign-in.
+2. Add the Google service-account credentials only to the server `.env`, share the client's active Sheet with that service account, map the live columns in Owner Settings, test the connection, and enable automatic sync.
+3. When the client is ready for Meta, use temporary Business Manager access to add the Page, forms, system-user token, webhook, and field mappings; run a test lead; then enable Meta intake.
+4. If the client wants Lead Response Desk connected to the existing CRM, use the documented API/event extension points in **Connecting to the client's CRM**. The two applications remain separate and must not share a database.
+
+The client does not need to rebuild these capabilities. Until the agency receives temporary access and completes the above configuration, the application can run and be reviewed, but it will not ingest the client's private live Sheet or Meta leads. Never send credentials in chat, documentation, source code, or GitHub; place them directly in the production server environment.
+
 ## Production deployment with Docker Compose and Caddy
 
 1. Point an approved domain at the client's VPS. Do not buy or change a domain without approval.
