@@ -4,6 +4,36 @@ Lead Response Desk is a standalone, multi-tenant response and follow-up applicat
 
 The operating flow is deliberately small: a lead arrives from Google Sheets or Meta, is assigned round-robin, appears in the salesperson’s Today queue, and starts a five-business-minute response clock. A Call or WhatsApp tap records the first touch without delaying the phone link. Four business-day follow-ups then run until the lead is marked Won, Dead or Bad, or becomes Dormant. Owners and salespeople see period-correct performance metrics; agencies have read-only access.
 
+## Client quick start
+
+### Demo logins for testing every access level
+
+These accounts contain dummy data and are created only when `npm run db:seed` is run. They are for local or controlled testing only and must not be used as production credentials.
+
+| Access level | Email | Password | What it can test |
+|---|---|---|---|
+| Owner / administrator | `owner@roopkala.demo` | `RoopkalaDemo!2026` | Dashboard, all leads, users, settings and integrations |
+| Salesperson 1 | `ashwini@roopkala.demo` | `RoopkalaDemo!2026` | Assigned Today queue, lead actions, notes, follow-ups and outcomes |
+| Salesperson 2 | `rhea@roopkala.demo` | `RoopkalaDemo!2026` | A second salesperson's isolated queue and metrics |
+| Agency viewer | `agency@roopkala.demo` | `RoopkalaDemo!2026` | Read-only dashboard and lead visibility |
+
+There is no separate `admin` role: **Owner is the administrator**. The demo seed refuses to run when `NODE_ENV=production`. A production deployment creates its real first Owner from secure server environment values, and that Owner creates the real Salesperson and Agency accounts from Settings.
+
+### After downloading: exact handoff sequence
+
+1. Extract the ZIP or clone this repository onto the client's VPS.
+2. Read `AGENTS.md`, this README, and `docs/go-live-checklist.md` before changing or deploying anything.
+3. Copy `.env.example` to `.env` and replace every placeholder with unique production values. Do not reuse the demo password or commit `.env`.
+4. Because the VPS already hosts another app, check which loopback ports are free and deploy with `compose.yaml` plus `compose.existing-proxy.yaml`. This starts Lead Response Desk with its own PostgreSQL database and does not touch the existing CRM's containers or database.
+5. Add one new subdomain/site block to the VPS's existing nginx, Caddy, or Traefik proxy and route it to the selected loopback port. Validate the proxy before reloading it.
+6. Run the production launch check, start PostgreSQL, migrations, web and worker, then verify `/api/health` and `npm run db:verify` using the commands in **Deploying onto a VPS that already runs other apps**.
+7. Sign in with the real bootstrap Owner account. Create the client's real Salesperson and optional Agency users in Settings, and require each person to replace their temporary password.
+8. The agency then uses temporary client access to add the Google service-account credentials to the server, share and map the live Sheet, test it, and enable automatic synchronization.
+9. Meta Lead Ads is already implemented but remains disabled until the agency receives temporary Business Manager access and completes the checklist in **Meta Lead Ads setup**.
+10. Run every item in `docs/go-live-checklist.md` before handing the production URL to users.
+
+Deploying Lead Response Desk beside the client's existing CRM does **not** automatically exchange data with that CRM. It works independently immediately, and with the client's current single salesperson its built-in assignment already sends every new lead to that person. If the client wants CRM-supplied assignments or two-way events, their team must provide the CRM API/webhook documentation and temporary access; the implementation extension points and payload guidance are documented in **Connecting to the client's CRM** below.
+
 ## Local run
 
 Requirements: Node.js 22, npm 10+, Docker Engine with Compose. The repository pins Node 22 in `.nvmrc` and `package.json`.
