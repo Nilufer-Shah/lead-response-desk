@@ -158,7 +158,7 @@ export interface PersonMetrics {
 }
 export interface DashboardData {
   period: DashboardPeriod; live: { untouched: number; oldestMinutes: number | null; oldestAssignee: string | null; missedToday: number };
-  people: PersonMetrics[]; totals: PersonMetrics; sources: { meta: number; sheet: number };
+  people: PersonMetrics[]; totals: PersonMetrics; sources: { meta: number; sheet: number; other: number };
 }
 
 export async function getProductDashboard(user: SessionUser, period: DashboardPeriod): Promise<DashboardData> {
@@ -220,11 +220,12 @@ export async function getProductDashboard(user: SessionUser, period: DashboardPe
     const touched = people.reduce((sum,row) => sum + row.touched,0);
     totals.avgResponseMinutes = touchedRows.length ? Math.round(touchedRows.reduce((sum,row) => sum + (row.avg_response ?? 0) * row.touched,0) / touchedRows.reduce((sum,row) => sum + row.touched,0)) : null;
     totals.withinFivePercent = touched ? Math.round(people.reduce((sum,row) => sum + row.within_five,0) / touched * 100) : 0;
-    const [sources] = await transaction<{ meta: number; sheet: number }[]>`
+    const [sources] = await transaction<{ meta: number; sheet: number; other: number }[]>`
       WITH bounds AS (SELECT ((clock_timestamp() AT TIME ZONE 'Asia/Kolkata')::date-${days - 1}::int) start_date,(clock_timestamp() AT TIME ZONE 'Asia/Kolkata')::date end_date)
-      SELECT count(*) FILTER (WHERE source='meta_lead_form')::int AS meta,count(*) FILTER (WHERE source='csv_import')::int AS sheet
+      SELECT count(*) FILTER (WHERE source='meta_lead_form')::int AS meta,count(*) FILTER (WHERE source='csv_import')::int AS sheet,
+        count(*) FILTER (WHERE source NOT IN ('meta_lead_form','csv_import'))::int AS other
       FROM app.leads,bounds WHERE tenant_id=${user.tenantId} AND (received_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN start_date AND end_date
     `;
-    return { period, live: { untouched: live?.untouched ?? 0, oldestMinutes: live?.oldest_minutes ?? null, oldestAssignee: live?.oldest_assignee ?? null, missedToday: live?.missed_today ?? 0 }, people: normalized, totals, sources: sources ?? { meta: 0, sheet: 0 } };
+    return { period, live: { untouched: live?.untouched ?? 0, oldestMinutes: live?.oldest_minutes ?? null, oldestAssignee: live?.oldest_assignee ?? null, missedToday: live?.missed_today ?? 0 }, people: normalized, totals, sources: sources ?? { meta: 0, sheet: 0, other: 0 } };
   });
 }

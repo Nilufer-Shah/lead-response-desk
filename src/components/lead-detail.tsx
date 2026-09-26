@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, ChevronRight, MessageCircle, NotebookPen, PhoneCall, RefreshCw, UserRoundCog, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, MessageCircle, NotebookPen, PhoneCall, RefreshCw, RotateCcw, UserRoundCog, X } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
 import type { LeadDetailData } from "@/services/product-read-models";
 import { MobileBottomNav } from "@/components/app-navigation";
@@ -19,7 +19,7 @@ function recordAttempt(leadId: string, channel: "call" | "whatsapp") {
 function words(value: string) { return value.replaceAll("_", " "); }
 
 export function LeadDetail({ data, user }: { data: LeadDetailData; user: SessionUser }) {
-  const [sheet, setSheet] = useState<"note" | "followup" | "outcome" | "assign" | null>(null);
+  const [sheet, setSheet] = useState<"note" | "followup" | "outcome" | "assign" | "repeat" | null>(null);
   const [followupId, setFollowupId] = useState("");
   const [outcome, setOutcome] = useState<"won" | "dead" | "bad">("won");
   const [reason, setReason] = useState("");
@@ -27,6 +27,7 @@ export function LeadDetail({ data, user }: { data: LeadDetailData; user: Session
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
   const closed = ["won", "dead", "bad"].includes(data.lead.stage);
   const readOnly = user.role === "agency";
 
@@ -38,6 +39,8 @@ export function LeadDetail({ data, user }: { data: LeadDetailData; user: Session
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setFormError(null);
     setSaving(true);
     const values = new FormData(event.currentTarget);
@@ -46,19 +49,22 @@ export function LeadDetail({ data, user }: { data: LeadDetailData; user: Session
     if (sheet === "followup") { endpoint = `/api/followups/${followupId}`; body = { answer: values.get("answer"), note: values.get("note") }; }
     if (sheet === "outcome") { endpoint = `/api/leads/${data.lead.id}/close`; body = { outcome, reason: reason || undefined, note: values.get("note") || undefined, orderValue: Number(values.get("orderValue")) || undefined }; }
     if (sheet === "assign") { endpoint = `/api/leads/${data.lead.id}/assign`; body = { userId: values.get("userId"), reason: values.get("reason") }; }
+    if (sheet === "repeat") { endpoint = `/api/leads/${data.lead.id}/repeat`; body = {}; }
     try {
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const result = await response.json() as { error?: string };
+      const result = await response.json() as { error?: string; leadId?: string };
       if (!response.ok) return setFormError(result.error ?? "Could not save this change");
+      if (sheet === "repeat" && result.leadId) { window.location.assign(`/leads/${result.leadId}`); return; }
       setSheet(null); setMessage("Saved. Refreshing the lead…"); window.setTimeout(() => window.location.reload(), 450);
     } catch {
       setFormError("The change could not be saved. Check the connection and try again.");
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   }
 
-  function openSheet(next: "note" | "followup" | "outcome" | "assign") {
+  function openSheet(next: "note" | "followup" | "outcome" | "assign" | "repeat") {
     setFormError(null);
     setSheet(next);
   }
@@ -72,18 +78,19 @@ export function LeadDetail({ data, user }: { data: LeadDetailData; user: Session
 
     <section className="followup-card"><header><div><h2>Four-day follow-up</h2><p>Every Yes needs a Call or WhatsApp attempt today.</p></div><span>{data.followups.filter((item) => item.status === "done").length}/{data.followups.length}</span></header>{data.followups.length ? data.followups.map((item) => <div className={`followup-line ${item.status}`} key={item.id}><span>Day {item.dayNumber}</span><small>{item.dueDate}</small><strong>{item.status}{item.answer ? ` · ${item.answer}` : ""}</strong>{!readOnly && !closed && ["pending", "missed"].includes(item.status) ? <button onClick={() => { setFollowupId(item.id); openSheet("followup"); }}>Complete <ChevronRight size={15} /></button> : <em>{item.note ?? "—"}</em>}</div>) : <p className="queue-empty">Follow-ups begin after the first Call or WhatsApp tap.</p>}</section>
 
-    {!readOnly && <section className="lead-management"><button disabled={closed} onClick={() => openSheet("outcome")}><Check />Record outcome</button>{user.role === "owner" && <button disabled={closed} onClick={() => openSheet("assign")}><UserRoundCog />Reassign</button>}<button onClick={() => window.location.reload()}><RefreshCw />Refresh</button></section>}
+    {!readOnly && <section className="lead-management">{closed ? <button onClick={() => openSheet("repeat")}><RotateCcw />Create new enquiry</button> : <button onClick={() => openSheet("outcome")}><Check />Record outcome</button>}{user.role === "owner" && !closed && <button onClick={() => openSheet("assign")}><UserRoundCog />Reassign</button>}<button onClick={() => window.location.reload()}><RefreshCw />Refresh</button></section>}
 
     <section className="timeline"><div className="timeline-title"><h2>Complete timeline</h2><span>{data.lead.attempts} attempts</span></div>{data.timeline.map((event) => <div className={`timeline-event ${event.tone}`} key={event.id}><span /><time>{event.at}</time><div><strong>{event.title}</strong><small>{event.detail}</small></div></div>)}</section>
 
     {message && <button className="saved-toast" onClick={() => setMessage(null)}><Check size={16} />{message}</button>}
-    {sheet && <div className="sheet-backdrop" onClick={() => !saving && setSheet(null)}><form className="action-sheet" onSubmit={submit} onClick={(event) => event.stopPropagation()}><header><div><small>{data.lead.name}</small><h2>{sheet === "note" ? "Add note" : sheet === "followup" ? "Complete follow-up" : sheet === "assign" ? "Reassign lead" : "Record final outcome"}</h2></div><button type="button" disabled={saving} aria-label="Close" onClick={() => setSheet(null)}><X /></button></header>
+    {sheet && <div className="sheet-backdrop" onClick={() => !saving && setSheet(null)}><form className="action-sheet" onSubmit={submit} onClick={(event) => event.stopPropagation()}><header><div><small>{data.lead.name}</small><h2>{sheet === "note" ? "Add note" : sheet === "followup" ? "Complete follow-up" : sheet === "assign" ? "Reassign lead" : sheet === "repeat" ? "Create a new enquiry" : "Record final outcome"}</h2></div><button type="button" disabled={saving} aria-label="Close" onClick={() => setSheet(null)}><X /></button></header>
       {sheet === "note" && <label>Note<textarea name="note" required placeholder="What happened and what should happen next?" /></label>}
       {sheet === "followup" && <><p className="action-sheet-help">For “Yes”, first tap Call or WhatsApp on this lead today so the contact is recorded.</p><label>Did you speak with the lead?<select name="answer" required defaultValue=""><option value="" disabled>Select</option><option value="yes">Yes</option><option value="no">No</option></select></label><label>Note (minimum 10 characters)<textarea name="note" minLength={10} required /></label></>}
       {sheet === "assign" && <><label>Assign to<select name="userId" required defaultValue=""><option value="" disabled>Select</option>{data.assignees.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Reason<textarea name="reason" minLength={5} required /></label></>}
+      {sheet === "repeat" && <p className="repeat-enquiry-note">This keeps the previous outcome unchanged and opens a fresh lead for the customer’s new interest. The new response timer starts now.</p>}
       {sheet === "outcome" && <><div className="outcome-tabs">{(["won", "dead", "bad"] as const).map((item) => <button type="button" className={outcome === item ? "active" : ""} onClick={() => { setOutcome(item); setReason(""); }} key={item}>{item}</button>)}</div>{outcome !== "won" && <label>Reason<select value={reason} onChange={(event) => setReason(event.target.value)} required><option value="" disabled>Select</option>{(outcome === "dead" ? deadReasons : badReasons).map((item) => <option key={item} value={item}>{words(item)}</option>)}</select></label>}{outcome === "won" && <label>Order value<input name="orderValue" type="number" min="1" required /></label>}{outcome === "dead" && reason === "other" && <label>Note<textarea name="note" required /></label>}{gate && <div className={gate.allowed ? "gate-ready gate-status" : "gate-failed gate-status"}>{gate.required_attempts > 0 ? `${gate.attempts} of ${gate.required_attempts} attempts, ${gate.distinct_days} of ${gate.required_days} days${gate.allowed ? " · ready" : ""}` : "No additional evidence gate for this outcome"}</div>}</>}
       {formError && <p className="action-sheet-error" role="alert">{formError}</p>}
-      <button className="primary-form-button" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+      <button className="primary-form-button" disabled={saving}>{saving ? "Saving…" : sheet === "repeat" ? "Create new enquiry" : "Save"}</button>
     </form></div>}
     <MobileBottomNav active="/leads" user={user} />
   </div>;

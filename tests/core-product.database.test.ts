@@ -11,6 +11,7 @@ const auth = vi.hoisted(() => ({ user: null as null | { id: string; tenantId: st
 vi.mock("@/lib/auth", () => ({ readSession: async () => auth.user }));
 
 import { POST as closeLead } from "@/app/api/leads/[id]/close/route";
+import { POST as repeatLead } from "@/app/api/leads/[id]/repeat/route";
 import { POST as answerFollowup } from "@/app/api/followups/[id]/route";
 import { POST as assignLead } from "@/app/api/leads/[id]/assign/route";
 
@@ -148,6 +149,23 @@ describe("repeat enquiries", () => {
     const afterClose = await ingest(`closed-2-${fixture.tenantId}`, "+919722222223");
     expect(afterClose.action).toBe("inserted");
     expect(afterClose.leadId).not.toBe(closed.leadId);
+  });
+
+  it("creates a fresh lead from a closed record without changing the historical outcome", async () => {
+    const fixture = await createFixture();
+    auth.user = sessionFor(fixture, fixture.salespersonA, "salesperson");
+    const closedAt = new Date();
+    const closedId = await insertLead(fixture, { stage: "dead", closedAt, outcomeReason: "not_interested", phone: "+919755555551" });
+
+    const response = await repeatLead(new Request(`http://localhost/api/leads/${closedId}/repeat`, { method: "POST" }), { params: Promise.resolve({ id: closedId }) });
+    expect(response.status).toBe(201);
+    const body = await response.json() as { leadId: string };
+    expect(body.leadId).not.toBe(closedId);
+
+    const [oldLead] = await sql<{ stage: string; outcome_reason: string }[]>`SELECT stage::text,outcome_reason FROM app.leads WHERE tenant_id=${fixture.tenantId} AND id=${closedId}`;
+    const [newLead] = await sql<{ stage: string; phone_e164: string }[]>`SELECT stage::text,phone_e164 FROM app.leads WHERE tenant_id=${fixture.tenantId} AND id=${body.leadId}`;
+    expect(oldLead).toEqual({ stage: "dead", outcome_reason: "not_interested" });
+    expect(newLead).toEqual({ stage: "new", phone_e164: "+919755555551" });
   });
 });
 
@@ -301,14 +319,14 @@ describe("dashboard metrics", () => {
 
     expect(person(today, fixture.salespersonA)).toEqual({ id: fixture.salespersonA, name: "Asha", assigned: 6, avgResponseMinutes: 6, withinFivePercent: 50, untouched: 2, followupsDue: 2, followupsDone: 1, followupsMissed: 1, dormant: 1, won: 1, dead: 1, bad: 1, reasons: { not_interested: 1, spam: 1 } });
     expect(person(today, fixture.salespersonB)).toEqual({ id: fixture.salespersonB, name: "Bina", assigned: 2, avgResponseMinutes: 2, withinFivePercent: 100, untouched: 1, followupsDue: 1, followupsDone: 0, followupsMissed: 0, dormant: 0, won: 1, dead: 0, bad: 1, reasons: { wrong_number: 1 } });
-    expect(today.sources).toEqual({ meta: 2, sheet: 6 });
+    expect(today.sources).toEqual({ meta: 2, sheet: 6, other: 0 });
 
     expect(person(seven, fixture.salespersonA)).toEqual({ id: fixture.salespersonA, name: "Asha", assigned: 9, avgResponseMinutes: 8, withinFivePercent: 50, untouched: 3, followupsDue: 4, followupsDone: 2, followupsMissed: 2, dormant: 2, won: 1, dead: 2, bad: 1, reasons: { not_interested: 1, price_too_high: 1, spam: 1 } });
     expect(person(seven, fixture.salespersonB)).toEqual({ id: fixture.salespersonB, name: "Bina", assigned: 4, avgResponseMinutes: 5, withinFivePercent: 50, untouched: 2, followupsDue: 2, followupsDone: 1, followupsMissed: 0, dormant: 0, won: 1, dead: 1, bad: 1, reasons: { bought_elsewhere: 1, wrong_number: 1 } });
-    expect(seven.sources).toEqual({ meta: 3, sheet: 10 });
+    expect(seven.sources).toEqual({ meta: 3, sheet: 10, other: 0 });
 
     expect(person(thirty, fixture.salespersonA)).toEqual({ id: fixture.salespersonA, name: "Asha", assigned: 12, avgResponseMinutes: 8, withinFivePercent: 50, untouched: 4, followupsDue: 5, followupsDone: 2, followupsMissed: 3, dormant: 3, won: 1, dead: 2, bad: 2, reasons: { fake_enquiry: 1, not_interested: 1, price_too_high: 1, spam: 1 } });
     expect(person(thirty, fixture.salespersonB)).toEqual({ id: fixture.salespersonB, name: "Bina", assigned: 5, avgResponseMinutes: 4, withinFivePercent: 67, untouched: 2, followupsDue: 3, followupsDone: 1, followupsMissed: 1, dormant: 1, won: 1, dead: 1, bad: 1, reasons: { bought_elsewhere: 1, wrong_number: 1 } });
-    expect(thirty.sources).toEqual({ meta: 4, sheet: 13 });
+    expect(thirty.sources).toEqual({ meta: 4, sheet: 13, other: 0 });
   });
 });

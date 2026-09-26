@@ -30,7 +30,7 @@ describe("staff feedback regressions", () => {
     const styles = read("src/app/globals.css");
     expect(detail).toContain('className="action-sheet-error" role="alert"');
     expect(detail).toContain("first tap Call or WhatsApp");
-    expect(detail).toContain('disabled={saving}>{saving ? "Saving…" : "Save"}');
+    expect(detail).toContain('disabled={saving}>{saving ? "Saving…"');
     expect(styles).toContain(".action-sheet { width: min(620px, 100%); max-height:");
     expect(styles).toContain(".primary-form-button { width: 100%;");
   });
@@ -40,5 +40,34 @@ describe("staff feedback regressions", () => {
     expect(formatDurationMinutes(10)).toBe("10 min");
     expect(formatDurationMinutes(60)).toBe("1h");
     expect(formatDurationMinutes(1455)).toBe("24h 15m");
+  });
+
+  it("provides dashboard navigation and a targeted all-date missed section", () => {
+    const queue = read("src/components/today-queue.tsx");
+    const dashboard = read("src/components/product-dashboard.tsx");
+    expect(queue).toContain('aria-label="Back to dashboard"');
+    expect(queue).toContain('id="missed-followups"');
+    expect(queue).toContain("Missed follow-ups · all dates");
+    expect(dashboard).toContain('href="/today#missed-followups"');
+    expect(dashboard).toContain("Due-today items are not missed yet");
+  });
+
+  it("handles refresh failures and prevents duplicate form submissions", () => {
+    const queue = read("src/components/today-queue.tsx");
+    const dashboard = read("src/components/product-dashboard.tsx");
+    const detail = read("src/components/lead-detail.tsx");
+    expect(queue).toContain("Could not refresh. Showing the last available queue.");
+    expect(dashboard).toContain("Could not refresh. Showing the last available dashboard.");
+    expect(queue).toContain("if (submitting.current) return");
+    expect(detail).toContain("if (submitting.current) return");
+  });
+
+  it("creates a new enquiry instead of rewriting a closed outcome", () => {
+    const detail = read("src/components/lead-detail.tsx");
+    const route = read("src/app/api/leads/[id]/repeat/route.ts");
+    expect(detail).toContain("Create new enquiry");
+    expect(detail).toContain("keeps the previous outcome unchanged");
+    expect(route).toContain("ingestLead(transaction");
+    expect(route).toContain("stage IN ('won','dead','bad')");
   });
 });

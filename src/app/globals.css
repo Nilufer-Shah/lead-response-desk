@@ -271,6 +271,7 @@ td:first-child { display: flex; align-items: center; gap: 9px; }
 .primary-form-button:disabled { opacity: .6; cursor: wait; }
 .action-sheet-help { margin: -3px 0 0; color: var(--text-faint); font-size: 10px; line-height: 1.5; }
 .action-sheet-error { margin: 0; padding: 10px 12px; color: var(--breach); border: 1px solid #efc2cb; border-radius: 9px; background: #fff2f4; font-size: 11px; line-height: 1.45; }
+.repeat-enquiry-note { margin: 0; padding: 13px; color: #675567; border: 1px solid #e4d5e1; border-radius: 10px; background: #fffafd; font-size: 11px; line-height: 1.55; }
 
 /* Admin, reports and authentication */
 .admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -750,6 +751,9 @@ tbody tr:hover td { background: #fffbfd; }
 
 /* Block 1 product flow */
 .refresh-button { display: grid; width: 42px; height: 42px; place-items: center; color: #7a5472; border: 1px solid var(--ink-line); border-radius: 12px; background: #fff; }
+.today-heading { display: flex; align-items: center; gap: 10px; }
+.today-back { display: grid; width: 38px; height: 38px; place-items: center; color: #6f4a67; border: 1px solid var(--ink-line); border-radius: 11px; background: #fff; }
+.refresh-error { margin: 0 0 13px; padding: 10px 12px; color: #8d5b19; border: 1px solid #efd5aa; border-radius: 9px; background: #fff8eb; font-size: 10px; }
 .spinning { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .alert-permission { width: 100%; display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 13px 14px; color: #6e2856; border: 1px solid #e8c8da; border-radius: 13px; background: #fff5fa; text-align: left; }
@@ -815,7 +819,8 @@ tbody tr:hover td { background: #fffbfd; }
 .dashboard-controls button { min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; color: #746676; border: 1px solid var(--ink-line); border-radius: 18px; background: #fff; font-size: 10px; font-weight: 700; }
 .dashboard-controls button.active { color: #fff; background: var(--thread); }
 .live-strip { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
-.live-strip a { min-height: 82px; display: flex; align-items: center; gap: 11px; padding: 14px; color: #5b3b53; border: 1px solid #eadfea; border-radius: 13px; background: #fff; text-decoration: none; }
+.live-strip a, .live-strip .live-card { min-height: 82px; display: flex; align-items: center; gap: 11px; padding: 14px; color: #5b3b53; border: 1px solid #eadfea; border-radius: 13px; background: #fff; text-decoration: none; }
+.live-strip .live-card.inactive { cursor: default; background: #fdfbfd; }
 .live-strip svg { color: var(--thread); }
 .live-strip span { display: flex; flex-direction: column; }
 .live-strip small, .live-strip em { color: var(--text-faint); font-size: 9px; font-style: normal; }
@@ -823,9 +828,10 @@ tbody tr:hover td { background: #fffbfd; }
 .product-metrics article strong { display: block; margin-top: 10px; }
 .dashboard-split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
 .reason-row { display: flex; justify-content: space-between; padding: 11px 18px; border-bottom: 1px solid #f1eaf0; text-transform: capitalize; font-size: 11px; }
-.source-panel > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
-.source-panel > div:last-child span { display: flex; flex-direction: column; padding: 24px; color: var(--text-faint); font-size: 10px; }
-.source-panel > div:last-child strong { color: #432f49; font-size: 30px; }
+.source-panel > div:nth-child(2) { display: grid; grid-template-columns: repeat(3,1fr); }
+.source-panel > div:nth-child(2) span { display: flex; flex-direction: column; padding: 24px; color: var(--text-faint); font-size: 10px; }
+.source-panel > div:nth-child(2) strong { color: #432f49; font-size: 30px; }
+.source-empty { margin: 0; padding: 0 24px 20px; color: var(--text-faint); font-size: 10px; }
 
 .admin-message { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 13px; color: #276f5d; border: 1px solid #bfe0d4; border-radius: 10px; background: #f1faf7; text-align: left; }
 .store-form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 11px; padding: 16px; }
